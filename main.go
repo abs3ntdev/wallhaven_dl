@@ -114,7 +114,7 @@ func setWallPaperAndRestartStuff(result wallhaven.Wallpaper) error {
 	if err != nil {
 		return err
 	}
-	_, err = exec.Command("swww", "img", path.Join(homedir, "/Pictures/Wallpapers", path.Base(result.Path)), "--transition-step=20", "--transition-fps=60").
+	_, err = exec.Command("swww", "img", path.Join(homedir, "/Pictures/Wallpapers", path.Base(result.Path))).
 		Output()
 	if err != nil {
 		return err
