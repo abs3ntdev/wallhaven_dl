@@ -21,6 +21,9 @@ var cli struct {
 	Top struct {
 		Purity string `arg:"" name:"purity" optional:"" help:"purity of results"`
 	} `cmd:"" help:"random toplist wallpaper"`
+	Img struct {
+		Path string `arg:"" name:"path" help:"path to image or directory." type:"path"`
+	} `cmd:"" help:"set from file"`
 }
 
 func main() {
@@ -36,9 +39,30 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	case "img <path>":
+		err := setFromPath(cli.Img.Path)
+		if err != nil {
+			panic(err)
+		}
 	default:
 		panic(ctx.Command())
 	}
+}
+
+func setFromPath(filePath string) error {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return err
+	}
+	if fileInfo.IsDir() {
+		files, err := os.ReadDir(filePath)
+		if err != nil {
+			return err
+		}
+		file := files[rand.Intn(len(files))]
+		return setWallPaperAndRestartStuff(file.Name())
+	}
+	return setWallPaperAndRestartStuff(filePath)
 }
 
 func searchAndSet(query string) error {
@@ -66,7 +90,7 @@ func searchAndSet(query string) error {
 	if err != nil {
 		return nil
 	}
-	err = setWallPaperAndRestartStuff(result)
+	err = setWallPaperAndRestartStuff(result.Path)
 	if err != nil {
 		return err
 	}
@@ -100,21 +124,21 @@ func setTop(purity string) error {
 	if err != nil {
 		return err
 	}
-	err = setWallPaperAndRestartStuff(result)
+	err = setWallPaperAndRestartStuff(result.Path)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func setWallPaperAndRestartStuff(result wallhaven.Wallpaper) error {
+func setWallPaperAndRestartStuff(result string) error {
 	homedir, _ := os.UserHomeDir()
-	_, err := exec.Command("wal", "--cols16", "-i", path.Join(homedir, "Pictures/Wallpapers", path.Base(result.Path)), "-n", "-a", "85").
+	_, err := exec.Command("wal", "--cols16", "-i", path.Join(homedir, "Pictures/Wallpapers", path.Base(result)), "-n", "-a", "85").
 		Output()
 	if err != nil {
 		return err
 	}
-	_, err = exec.Command("swww", "img", path.Join(homedir, "/Pictures/Wallpapers", path.Base(result.Path))).
+	_, err = exec.Command("swww", "img", path.Join(homedir, "/Pictures/Wallpapers", path.Base(result))).
 		Output()
 	if err != nil {
 		return err
