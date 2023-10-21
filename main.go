@@ -105,7 +105,7 @@ func setTop(purity string) error {
 		Purities:   "110",
 		Sorting:    wallhaven.Toplist,
 		Order:      wallhaven.Desc,
-		TopRange:   "1y",
+		TopRange:   "1m",
 		AtLeast:    wallhaven.Resolution{Width: 2560, Height: 1400},
 		Ratios: []wallhaven.Ratio{
 			{Horizontal: 16, Vertical: 9},
