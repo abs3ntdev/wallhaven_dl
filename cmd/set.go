@@ -101,7 +101,7 @@ var (
 		Use:     "set",
 		Aliases: []string{"s"},
 		Args:    cobra.RangeArgs(0, 1),
-		Short:   "set wallpaper from setlist",
+		Short:   "query wallhaven with the provided parameters then download the image, set it as wallpaper, and generate colorscheme",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return set(args)
 		},
