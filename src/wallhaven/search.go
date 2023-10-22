@@ -158,8 +158,8 @@ type Search struct {
 	Query       Q
 	Categories  string
 	Purities    string
-	Sorting     Sort
-	Order       Order
+	Sorting     string
+	Order       string
 	TopRange    string
 	AtLeast     Resolution
 	Resolutions []Resolution
@@ -176,13 +176,13 @@ func (s Search) toQuery() url.Values {
 	if s.Purities != "" {
 		v.Add("purity", s.Purities)
 	}
-	if s.Sorting > 0 {
-		v.Add("sorting", s.Sorting.String())
+	if s.Sorting != "" {
+		v.Add("sorting", s.Sorting)
 	}
-	if s.Order > 0 {
-		v.Add("order", s.Order.String())
+	if s.Order != "" {
+		v.Add("order", s.Order)
 	}
-	if s.TopRange != "" && s.Sorting == Toplist {
+	if s.TopRange != "" && s.Sorting == "toplist" {
 		v.Add("topRange", s.TopRange)
 	}
 	if s.AtLeast.isValid() {

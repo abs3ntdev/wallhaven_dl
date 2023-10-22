@@ -17,3 +17,4 @@ uninstall:
 
 install:
 	cp wallhaven_dl /usr/bin
+	./wallhaven_dl completion zsh > /usr/share/zsh/site-functions/_wallhaven_dl
