@@ -22,14 +22,14 @@ func init() {
 		"range",
 		"r",
 		"1y",
-		"range for setList search (default is 1 Year).",
+		"range for setList search.",
 	)
 	setCmd.PersistentFlags().StringVarP(
 		&setPurity,
 		"purity",
 		"p",
 		"110",
-		"purity for the setList search (default is 110).",
+		"purity for the setList search.",
 	)
 	setCmd.PersistentFlags().
 		StringVarP(
@@ -37,7 +37,7 @@ func init() {
 			"categories",
 			"c",
 			"010",
-			"categories for the setList search (default is 010).",
+			"categories for the setList search.",
 		)
 	setCmd.PersistentFlags().
 		StringVarP(
@@ -45,7 +45,7 @@ func init() {
 			"sort",
 			"s",
 			"toplist",
-			"sort by for results, valid sorts: date_added, relevance, random, views, favorites, setlist (default is toplist)",
+			"sort by for results, valid sorts: date_added, relevance, random, views, favorites, setlist.",
 		)
 	setCmd.PersistentFlags().
 		StringVarP(
@@ -53,7 +53,15 @@ func init() {
 			"order",
 			"o",
 			"desc",
-			"sort order for results, valid sorts: asc desc (default is desc)",
+			"sort order for results, valid sorts: asc desc.",
+		)
+	setCmd.PersistentFlags().
+		IntVarP(
+			&setPage,
+			"maxPage",
+			"m",
+			5,
+			"number of pages to randomly choose wallpaper from.",
 		)
 	setCmd.PersistentFlags().
 		BoolVarP(
@@ -61,7 +69,21 @@ func init() {
 			"localPath",
 			"l",
 			false,
-			"set to true if the argument is to a directory or an image file (default is false)",
+			"set if the argument is to a directory or an image file.",
+		)
+	setCmd.PersistentFlags().
+		StringSliceVar(
+			&setRatios,
+			"ratios",
+			[]string{"16x9", "16x10"},
+			"ratios to search for.",
+		)
+	setCmd.PersistentFlags().
+		StringVar(
+			&setAtLeast,
+			"at-least",
+			"2560x1440",
+			"minimum resolution for results.",
 		)
 }
 
@@ -71,6 +93,9 @@ var (
 	setCategories string
 	setSorting    string
 	setOrder      string
+	setAtLeast    string
+	setRatios     []string
+	setPage       int
 	localPath     bool
 	setCmd        = &cobra.Command{
 		Use:     "set",
@@ -111,12 +136,9 @@ func set(args []string) error {
 		Sorting:    setSorting,
 		Order:      setOrder,
 		TopRange:   setRange,
-		AtLeast:    wallhaven.Resolution{Width: 2560, Height: 1440},
-		Ratios: []wallhaven.Ratio{
-			{Horizontal: 16, Vertical: 9},
-			{Horizontal: 16, Vertical: 10},
-		},
-		Page: r.Intn(5) + 1,
+		AtLeast:    setAtLeast,
+		Ratios:     setRatios,
+		Page:       r.Intn(setPage) + 1,
 	}
 	log.Println(args)
 	if len(args) > 0 {

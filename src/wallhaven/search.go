@@ -2,7 +2,6 @@ package wallhaven
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,107 +11,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// Search Types
-
-// Category is an enum used to represent wallpaper categories
-type Category string
-
-// Purity is an enum used to represent
-type Purity string
-
-// Sort enum specifies the various sort types accepted by WH api
-type Sort int
-
-// Sort Enum Values
-const (
-	DateAdded Sort = iota + 1
-	Relevance
-	Random
-	Views
-	Favorites
-	Toplist
-)
-
-func (s Sort) String() string {
-	str := [...]string{"", "date_added", "relevance", "random", "views", "favorites", "toplist"}
-	return str[s]
-}
-
-// Order enum specifies the sort orders accepted by WH api
-type Order int
-
-// Sort Enum Values
-const (
-	Desc Order = iota + 1
-	Asc
-)
-
-func (o Order) String() string {
-	str := [...]string{"", "desc", "asc"}
-	return str[o]
-}
-
-// Privacy enum specifies the collection privacy returned by WH api
-type Privacy int
-
-// Privacy Enum Values
-const (
-	Private Privacy = iota
-	Public
-)
-
-func (p Privacy) String() string {
-	str := [...]string{"private", "public"}
-	return str[p]
-}
-
-// TopRange is used to specify the time window for 'top' result when topList is chosen as sort param
-type TopRange int
-
-// Enum for TopRange values
-const (
-	Day TopRange = iota + 1
-	ThreeDay
-	Week
-	Month
-	ThreeMonth
-	SixMonth
-	Year
-)
-
-func (t TopRange) String() string {
-	str := [...]string{"1d", "3d", "1w", "1M", "3M", "6M", "1y"}
-	return str[t]
-}
-
-// Resolution specifies the image resolution to find
-type Resolution struct {
-	Width  int64
-	Height int64
-}
-
-func (r Resolution) String() string {
-	return fmt.Sprintf("%vx%v", r.Width, r.Height)
-}
-
-func (r Resolution) isValid() bool {
-	return r.Width > 0 && r.Height > 0
-}
-
-// Ratio may be used to specify the aspect ratio of the search
-type Ratio struct {
-	Horizontal int
-	Vertical   int
-}
-
-func (r Ratio) String() string {
-	return fmt.Sprintf("%vx%v", r.Horizontal, r.Vertical)
-}
-
-func (r Ratio) isValid() bool {
-	return r.Vertical > 0 && r.Horizontal > 0
-}
 
 // WallpaperID is a string representing a wallpaper
 type WallpaperID string
@@ -161,9 +59,9 @@ type Search struct {
 	Sorting     string
 	Order       string
 	TopRange    string
-	AtLeast     Resolution
-	Resolutions []Resolution
-	Ratios      []Ratio
+	AtLeast     string
+	Resolutions []string
+	Ratios      []string
 	Colors      []string // Colors is an array of hex colors represented as strings in #RRGGBB format
 	Page        int
 }
@@ -185,30 +83,14 @@ func (s Search) toQuery() url.Values {
 	if s.TopRange != "" && s.Sorting == "toplist" {
 		v.Add("topRange", s.TopRange)
 	}
-	if s.AtLeast.isValid() {
-		v.Add("atleast", s.AtLeast.String())
+	if s.AtLeast != "" {
+		v.Add("atleast", s.AtLeast)
 	}
 	if len(s.Resolutions) > 0 {
-		outRes := []string{}
-		for _, res := range s.Resolutions {
-			if res.isValid() {
-				outRes = append(outRes, res.String())
-			}
-		}
-		if len(outRes) > 0 {
-			v.Add("resolutions", strings.Join(outRes, ","))
-		}
+		v.Add("resolutions", strings.Join(s.Ratios, ","))
 	}
 	if len(s.Ratios) > 0 {
-		outRat := []string{}
-		for _, rat := range s.Ratios {
-			if rat.isValid() {
-				outRat = append(outRat, rat.String())
-			}
-		}
-		if len(outRat) > 0 {
-			v.Add("ratios", strings.Join(outRat, ","))
-		}
+		v.Add("ratios", strings.Join(s.Ratios, ","))
 	}
 	if len(s.Colors) > 0 {
 		v.Add("colors", strings.Join([]string(s.Colors), ","))
