@@ -19,7 +19,8 @@ var cli struct {
 		Query string `arg:"" name:"query" help:"what to search for." type:"string"`
 	} `cmd:"" help:"search for wallpaper"`
 	Top struct {
-		Purity string `arg:"" name:"purity" optional:"" help:"purity of results"`
+		Purity string `name:"purity" optional:"" help:"purity of results"`
+		Range  string `name:"range" optional:"" help:"range for toplist"`
 	} `cmd:"" help:"random toplist wallpaper"`
 	Img struct {
 		Path string `arg:"" name:"path" help:"path to image or directory." type:"path"`
@@ -34,8 +35,8 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-	case "top", "top <purity>":
-		err := setTop(cli.Top.Purity)
+	case "top":
+		err := setTop(cli.Top.Purity, cli.Top.Range)
 		if err != nil {
 			panic(err)
 		}
@@ -97,7 +98,7 @@ func searchAndSet(query string) error {
 	return nil
 }
 
-func setTop(purity string) error {
+func setTop(purity, topRange string) error {
 	seed := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(seed)
 	s := &wallhaven.Search{
@@ -105,7 +106,7 @@ func setTop(purity string) error {
 		Purities:   "110",
 		Sorting:    wallhaven.Toplist,
 		Order:      wallhaven.Desc,
-		TopRange:   "1m",
+		TopRange:   "6m",
 		AtLeast:    wallhaven.Resolution{Width: 2560, Height: 1400},
 		Ratios: []wallhaven.Ratio{
 			{Horizontal: 16, Vertical: 9},
@@ -115,6 +116,9 @@ func setTop(purity string) error {
 	}
 	if purity != "" {
 		s.Purities = purity
+	}
+	if topRange != "" {
+		s.TopRange = topRange
 	}
 	results, err := wallhaven.SearchWallpapers(s)
 	if err != nil {
