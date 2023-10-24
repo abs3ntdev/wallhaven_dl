@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -64,14 +62,6 @@ func init() {
 			"number of pages to randomly choose wallpaper from.",
 		)
 	setCmd.PersistentFlags().
-		BoolVarP(
-			&localPath,
-			"localPath",
-			"l",
-			false,
-			"set if the argument is to a directory or an image file.",
-		)
-	setCmd.PersistentFlags().
 		StringSliceVar(
 			&setRatios,
 			"ratios",
@@ -85,6 +75,20 @@ func init() {
 			"2560x1440",
 			"minimum resolution for results.",
 		)
+	setCmd.PersistentFlags().StringVarP(
+		&setScript,
+		"script",
+		"t",
+		"",
+		"script to run after downloading the wallpaper",
+	)
+	setCmd.PersistentFlags().StringVarP(
+		&setPath,
+		"download-path",
+		"d",
+		"",
+		"script to run after downloading the wallpaper",
+	)
 }
 
 var (
@@ -94,9 +98,10 @@ var (
 	setSorting    string
 	setOrder      string
 	setAtLeast    string
+	setScript     string
+	setPath       string
 	setRatios     []string
 	setPage       int
-	localPath     bool
 	setCmd        = &cobra.Command{
 		Use:     "set",
 		Aliases: []string{"s"},
@@ -109,25 +114,6 @@ var (
 )
 
 func set(args []string) error {
-	if localPath {
-		if len(args) == 0 {
-			return fmt.Errorf("you must provide a path to an image or directory of images to use this option")
-		}
-		filePath := args[0]
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			return err
-		}
-		if fileInfo.IsDir() {
-			files, err := os.ReadDir(filePath)
-			if err != nil {
-				return err
-			}
-			file := files[rand.Intn(len(files))]
-			return setWallPaperAndRestartStuff(file.Name())
-		}
-		return setWallPaperAndRestartStuff(filePath)
-	}
 	seed := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(seed)
 	s := &wallhaven.Search{
@@ -140,7 +126,6 @@ func set(args []string) error {
 		Ratios:     setRatios,
 		Page:       r.Intn(setPage) + 1,
 	}
-	log.Println(args)
 	if len(args) > 0 {
 		s.Query = wallhaven.Q{
 			Tags: []string{args[0]},
@@ -150,64 +135,41 @@ func set(args []string) error {
 	if err != nil {
 		return err
 	}
-	result, err := getOrDownload(results, r)
+	resultPath, err := getOrDownload(results, r)
 	if err != nil {
 		return err
 	}
-	err = setWallPaperAndRestartStuff(result.Path)
-	if err != nil {
-		return err
+	if setScript != "" {
+		err = runScript(resultPath, setScript)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func getOrDownload(results *wallhaven.SearchResults, r *rand.Rand) (wallhaven.Wallpaper, error) {
+func getOrDownload(results *wallhaven.SearchResults, r *rand.Rand) (string, error) {
 	if len(results.Data) == 0 {
-		return wallhaven.Wallpaper{}, fmt.Errorf("no wallpapers found")
+		return "", fmt.Errorf("no wallpapers found")
 	}
 	homedir, _ := os.UserHomeDir()
+	downloadPath := path.Join(homedir, "Pictures/Wallpapers")
+	if setPath != "" {
+		downloadPath = setPath
+	}
 	result := results.Data[r.Intn(len(results.Data))]
-	if _, err := os.Stat(path.Join(homedir, "Pictures/Wallpapers", path.Base(result.Path))); err != nil {
-		err = result.Download(path.Join(homedir, "Pictures/Wallpapers"))
+	fullPath := path.Join(downloadPath, path.Base(result.Path))
+	if _, err := os.Stat(fullPath); err != nil {
+		err = result.Download(path.Join(downloadPath))
 		if err != nil {
-			return wallhaven.Wallpaper{}, err
+			return "", err
 		}
 	}
-	return result, nil
+	return fullPath, nil
 }
 
-func setWallPaperAndRestartStuff(result string) error {
-	homedir, _ := os.UserHomeDir()
-	_, err := exec.Command("wal", "--cols16", "-i", path.Join(homedir, "Pictures/Wallpapers", path.Base(result)), "-n", "-a", "85").
-		Output()
-	if err != nil {
-		return err
-	}
-	_, err = exec.Command("swww", "img", path.Join(homedir, "/Pictures/Wallpapers", path.Base(result))).
-		Output()
-	if err != nil {
-		return err
-	}
-	_, err = exec.Command("restart_dunst").
-		Output()
-	if err != nil {
-		return err
-	}
-	_, err = exec.Command("pywalfox", "update").
-		Output()
-	if err != nil {
-		return err
-	}
-	source, err := os.Open(path.Join(homedir, ".cache/wal/discord-wal.theme.css"))
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-	destination, err := os.Create(path.Join(homedir, ".config/Vencord/themes/discord-wal.theme.css"))
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(destination, source)
+func runScript(imgPath, script string) error {
+	_, err := exec.Command(script, imgPath).Output()
 	if err != nil {
 		return err
 	}
