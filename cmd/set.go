@@ -29,52 +29,46 @@ func init() {
 		"110",
 		"purity for the setList search.",
 	)
-	setCmd.PersistentFlags().
-		StringVarP(
-			&setCategories,
-			"categories",
-			"c",
-			"010",
-			"categories for the setList search.",
-		)
-	setCmd.PersistentFlags().
-		StringVarP(
-			&setSorting,
-			"sort",
-			"s",
-			"toplist",
-			"sort by for results, valid sorts: date_added, relevance, random, views, favorites, setlist.",
-		)
-	setCmd.PersistentFlags().
-		StringVarP(
-			&setOrder,
-			"order",
-			"o",
-			"desc",
-			"sort order for results, valid sorts: asc desc.",
-		)
-	setCmd.PersistentFlags().
-		IntVarP(
-			&setPage,
-			"maxPage",
-			"m",
-			5,
-			"number of pages to randomly choose wallpaper from.",
-		)
-	setCmd.PersistentFlags().
-		StringSliceVar(
-			&setRatios,
-			"ratios",
-			[]string{"16x9", "16x10"},
-			"ratios to search for.",
-		)
-	setCmd.PersistentFlags().
-		StringVar(
-			&setAtLeast,
-			"at-least",
-			"2560x1440",
-			"minimum resolution for results.",
-		)
+	setCmd.PersistentFlags().StringVarP(
+		&setCategories,
+		"categories",
+		"c",
+		"010",
+		"categories for the setList search.",
+	)
+	setCmd.PersistentFlags().StringVarP(
+		&setSorting,
+		"sort",
+		"s",
+		"toplist",
+		"sort by for results, valid sorts: date_added, relevance, random, views, favorites, setlist.",
+	)
+	setCmd.PersistentFlags().StringVarP(
+		&setOrder,
+		"order",
+		"o",
+		"desc",
+		"sort order for results, valid sorts: asc desc.",
+	)
+	setCmd.PersistentFlags().IntVarP(
+		&setPage,
+		"maxPage",
+		"m",
+		5,
+		"number of pages to randomly choose wallpaper from.",
+	)
+	setCmd.PersistentFlags().StringSliceVar(
+		&setRatios,
+		"ratios",
+		[]string{"16x9", "16x10"},
+		"ratios to search for.",
+	)
+	setCmd.PersistentFlags().StringVar(
+		&setAtLeast,
+		"at-least",
+		"2560x1440",
+		"minimum resolution for results.",
+	)
 	setCmd.PersistentFlags().StringVarP(
 		&setScript,
 		"script",
@@ -106,7 +100,7 @@ var (
 		Use:     "set",
 		Aliases: []string{"s"},
 		Args:    cobra.RangeArgs(0, 1),
-		Short:   "query wallhaven with the provided parameters then download the image, set it as wallpaper, and generate colorscheme",
+		Short:   "Wallhaven downloader with the option to run a script after the image has been downloaded",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return set(args)
 		},
