@@ -22,3 +22,15 @@ Flags:
   -t, --script string          script to run after downloading the wallpaper
   -s, --sort string            sort by for results, valid sorts: date_added, relevance, random, views, favorites, searchlist. (default "toplist")
 ```
+
+if you want to have access to NSFW wallpapers make sure to set WH_API_KEY
+
+categories:
+|0|0|0|
+|-|-|-|
+|general|anime|people|
+
+purity:
+|0|0|0|
+|-|-|-|
+|sfw|sketchy|nsfw|
