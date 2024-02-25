@@ -20,10 +20,6 @@ func main() {
 		EnableShellCompletion: true,
 		Name:                  "wallhaven_dl",
 		Usage:                 "Download wallpapers from wallhaven.cc",
-		Action: func(ctx context.Context, c *cli.Command) error {
-			fmt.Println("cli")
-			return nil
-		},
 		Commands: []*cli.Command{
 			{
 				Name:  "search",
