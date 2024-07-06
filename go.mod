@@ -3,7 +3,7 @@ module git.asdf.cafe/abs3nt/wallhaven_dl
 go 1.22.0
 
 require (
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.1
 	github.com/urfave/cli/v3 v3.0.0-alpha9
 )
 
