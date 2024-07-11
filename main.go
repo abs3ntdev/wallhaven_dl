@@ -153,7 +153,7 @@ func search(c *cli.Command) error {
 		TopRange:   c.String("range"),
 		AtLeast:    c.String("atLeast"),
 		Ratios:     c.StringSlice("ratios"),
-		Page:       c.Int("page"),
+		Page:       int64(rand.Intn(int(c.Int("page"))) + 1),
 	}
 	query := c.Args().First()
 	if query != "" {
