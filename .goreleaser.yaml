@@ -8,9 +8,7 @@ before:
     - go mod tidy
 
 builds:
-  - env:
-      - CGO_ENABLED=0
-    goos:
+  - goos:
       - linux
       - windows
       - darwin
@@ -18,7 +16,7 @@ builds:
       - goos: windows
         goarch: "386"
     ldflags:
-      - -s -w -X git.asdf.cafe/abs3nt/wallhaven_dl/main.Version={{.Version}}
+      - -s -w -X main.Version={{.Version}}
 
 archives:
   - format: tar.gz
