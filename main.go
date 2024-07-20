@@ -15,9 +15,12 @@ import (
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
 )
 
+var Version = "dev"
+
 func main() {
 	app := cli.Command{
 		EnableShellCompletion: true,
+		Version:               Version,
 		Name:                  "wallhaven_dl",
 		Usage:                 "Download wallpapers from wallhaven.cc",
 		Commands: []*cli.Command{
