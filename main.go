@@ -198,9 +198,8 @@ func getOrDownload(results *wallhaven.SearchResults, r *rand.Rand, downloadPath 
 }
 
 func runScript(imgPath, script string) error {
-	_, err := exec.Command(script, imgPath).Output()
-	if err != nil {
-		return err
-	}
-	return nil
+	cmd := exec.Command(script, imgPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
