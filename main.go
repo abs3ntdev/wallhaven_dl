@@ -188,13 +188,18 @@ func getOrDownload(results *wallhaven.SearchResults, r *rand.Rand, downloadPath 
 	}
 	result := results.Data[r.Intn(len(results.Data))]
 	fullPath := path.Join(downloadPath, path.Base(result.Path))
-	if _, err := os.Stat(fullPath); err != nil {
+	_, err := os.Stat(fullPath)
+	if err == nil {
+		return fullPath, nil
+	}
+	if os.IsNotExist(err) {
 		err = result.Download(path.Join(downloadPath))
 		if err != nil {
 			return "", err
 		}
+		return fullPath, nil
 	}
-	return fullPath, nil
+	return "", err
 }
 
 func runScript(imgPath, script string) error {
