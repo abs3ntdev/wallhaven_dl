@@ -1,210 +1,161 @@
+// Package main provides the CLI entry point for wallhaven_dl
 package main
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"math/rand"
+	"log/slog"
 	"os"
-	"os/exec"
-	"path"
-	"time"
+	"path/filepath"
 
 	"github.com/urfave/cli/v3"
 
+	"git.asdf.cafe/abs3nt/wallhaven_dl/cmd"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
 )
+
+// wallhavenAPI implements the WallpaperAPI interface
+type wallhavenAPI struct{}
+
+func (api *wallhavenAPI) SearchWallpapers(ctx context.Context, search *wallhaven.Search) (*wallhaven.SearchResults, error) {
+	return wallhaven.SearchWallpapersWithContext(ctx, search)
+}
+
+func (api *wallhavenAPI) DownloadWallpaper(ctx context.Context, wallpaper *wallhaven.Wallpaper, dir string) error {
+	return wallpaper.DownloadWithContext(ctx, dir)
+}
 
 var Version = "dev"
 
 func main() {
-	app := cli.Command{
+	logger := setupLogger()
+	slog.SetDefault(logger)
+
+	cache, err := initializeCache()
+	if err != nil {
+		logger.Error("Failed to initialize cache", "error", err)
+		os.Exit(1)
+	}
+
+	app := createCLIApp(cache, logger)
+	
+	if err := app.Run(context.Background(), os.Args); err != nil {
+		logger.Error("Application failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func setupLogger() *slog.Logger {
+	level := slog.LevelInfo
+	if os.Getenv("DEBUG") != "" {
+		level = slog.LevelDebug
+	}
+
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	}))
+}
+
+func initializeCache() (*wallhaven.WallpaperCache, error) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return nil, fmt.Errorf("HOME environment variable not set")
+	}
+	
+	cacheDir := filepath.Join(home, "Pictures", "Wallpapers", constants.CacheDir)
+	return wallhaven.NewWallpaperCache(cacheDir)
+}
+
+func createCLIApp(cache *wallhaven.WallpaperCache, logger *slog.Logger) *cli.Command {
+	// Initialize handlers
+	searchHandler := cmd.NewSearchHandler(cache, &wallhavenAPI{}, logger)
+	previousHandler := cmd.NewPreviousHandler(cache, logger)
+	statsHandler := cmd.NewStatsHandler(cache, logger)
+	cleanupHandler := cmd.NewCleanupHandler(cache, logger)
+	favoritesHandler := cmd.NewFavoritesHandler(cache, logger)
+	rateHandler := cmd.NewRateHandler(cache, logger)
+
+	return &cli.Command{
 		EnableShellCompletion: true,
 		Version:               Version,
-		Name:                  "wallhaven_dl",
+		Name:                  constants.AppName,
 		Usage:                 "Download wallpapers from wallhaven.cc",
 		Commands: []*cli.Command{
 			{
 				Name:  "search",
 				Usage: "Search for wallpapers",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "range",
-						Aliases: []string{"r"},
-						Value:   "1y",
-						Validator: func(s string) error {
-							if s != "1d" && s != "3d" && s != "1w" && s != "1M" && s != "3M" && s != "6M" && s != "1y" {
-								return fmt.Errorf("range must be '1d', '3d', '1w', '1M', '3M', '6M' or '1y'")
-							}
-							return nil
+				Flags: searchHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return searchHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "previous",
+				Aliases: []string{"prev", "p"},
+				Usage:   "Switch back to the previous wallpaper",
+				Flags:   previousHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return previousHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "stats",
+				Aliases: []string{"statistics"},
+				Usage:   "Show wallpaper statistics",
+				Flags:   statsHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return statsHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "cleanup",
+				Aliases: []string{"clean"},
+				Usage:   "Clean up old or unused wallpapers",
+				Flags:   cleanupHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return cleanupHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "favorite",
+				Aliases: []string{"fav"},
+				Usage:   "Manage favorite wallpapers",
+				Commands: []*cli.Command{
+					{
+						Name:  "add",
+						Usage: "Add current wallpaper to favorites",
+						Flags: favoritesHandler.GetCommonFlags(),
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return favoritesHandler.HandleAdd(ctx, c)
 						},
-						Usage: "Time range for top sorting",
 					},
-					&cli.StringFlag{
-						Name:    "purity",
-						Aliases: []string{"p"},
-						Value:   "110",
-						Validator: func(s string) error {
-							if len(s) != 3 {
-								return fmt.Errorf("purity must be 3 characters long")
-							}
-							for _, c := range s {
-								if c != '0' && c != '1' {
-									return fmt.Errorf("purity must be 0 or 1")
-								}
-							}
-							return nil
+					{
+						Name:  "list",
+						Usage: "List all favorite wallpapers",
+						Flags: favoritesHandler.GetCommonFlags(),
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return favoritesHandler.HandleList(ctx, c)
 						},
-						Usage: "Purity of the wallpapers",
 					},
-					&cli.StringFlag{
-						Name:    "categories",
-						Aliases: []string{"c"},
-						Value:   "010",
-						Validator: func(s string) error {
-							if len(s) != 3 {
-								return fmt.Errorf("categories must be 3 characters long")
-							}
-							for _, c := range s {
-								if c != '0' && c != '1' {
-									return fmt.Errorf("categories must be 0 or 1")
-								}
-							}
-							return nil
+					{
+						Name:  "random",
+						Usage: "Set a random favorite as wallpaper",
+						Flags: favoritesHandler.GetRandomFlags(),
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return favoritesHandler.HandleRandom(ctx, c)
 						},
-						Usage: "Categories of the wallpapers",
-					},
-					&cli.StringFlag{
-						Name:    "sort",
-						Aliases: []string{"s"},
-						Value:   "toplist",
-						Validator: func(s string) error {
-							if s != "relevance" && s != "random" && s != "date_added" && s != "views" && s != "favorites" &&
-								s != "toplist" {
-								return fmt.Errorf(
-									"sort must be 'relevance', 'random', 'date_added', 'views', 'favorites' or 'toplist'",
-								)
-							}
-							return nil
-						},
-						Usage: "Sorting of the wallpapers",
-					},
-					&cli.StringFlag{
-						Name:    "order",
-						Aliases: []string{"o"},
-						Value:   "desc",
-						Validator: func(s string) error {
-							if s != "asc" && s != "desc" {
-								return fmt.Errorf("order must be 'asc' or 'desc'")
-							}
-							return nil
-						},
-						Usage: "Order of the wallpapers",
-					},
-					&cli.IntFlag{
-						Name:    "page",
-						Aliases: []string{"pg"},
-						Value:   5,
-						Usage:   "Pages to search",
-					},
-					&cli.StringSliceFlag{
-						Name:    "ratios",
-						Aliases: []string{"rt"},
-						Value:   []string{"16x9", "16x10"},
-						Usage:   "Ratios of the wallpapers",
-					},
-					&cli.StringFlag{
-						Name:    "atLeast",
-						Aliases: []string{"al"},
-						Value:   "2560x1440",
-						Usage:   "Minimum resolution",
-					},
-					&cli.StringFlag{
-						Name:      "scriptPath",
-						Aliases:   []string{"sp"},
-						Value:     "",
-						TakesFile: true,
-						Usage:     "Path to the script to run after downloading",
-					},
-					&cli.StringFlag{
-						Name:      "downloadPath",
-						Aliases:   []string{"dp"},
-						Value:     os.Getenv("HOME") + "/Pictures/Wallpapers",
-						TakesFile: true,
-						Usage:     "Path to download the wallpapers",
 					},
 				},
+			},
+			{
+				Name:  "rate",
+				Usage: "Rate current wallpaper (1-5 stars)",
+				Flags: rateHandler.GetFlags(),
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return search(c)
+					return rateHandler.Handle(ctx, c)
 				},
 			},
 		},
 	}
-	if err := app.Run(context.Background(), os.Args); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func search(c *cli.Command) error {
-	seed := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(seed)
-	s := &wallhaven.Search{
-		Categories: c.String("categories"),
-		Purities:   c.String("purity"),
-		Sorting:    c.String("sort"),
-		Order:      c.String("order"),
-		TopRange:   c.String("range"),
-		AtLeast:    c.String("atLeast"),
-		Ratios:     c.StringSlice("ratios"),
-		Page:       int64(rand.Intn(int(c.Int("page"))) + 1),
-	}
-	query := c.Args().First()
-	if query != "" {
-		s.Query = wallhaven.Q{
-			Tags: []string{query},
-		}
-	}
-	results, err := wallhaven.SearchWallpapers(s)
-	if err != nil {
-		return err
-	}
-	resultPath, err := getOrDownload(results, r, c.String("downloadPath"))
-	if err != nil {
-		return err
-	}
-	searchScript := c.String("scriptPath")
-	if searchScript != "" {
-		err = runScript(resultPath, searchScript)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func getOrDownload(results *wallhaven.SearchResults, r *rand.Rand, downloadPath string) (string, error) {
-	if len(results.Data) == 0 {
-		return "", fmt.Errorf("no wallpapers found")
-	}
-	result := results.Data[r.Intn(len(results.Data))]
-	fullPath := path.Join(downloadPath, path.Base(result.Path))
-	_, err := os.Stat(fullPath)
-	if err == nil {
-		return fullPath, nil
-	}
-	if os.IsNotExist(err) {
-		err = result.Download(path.Join(downloadPath))
-		if err != nil {
-			return "", err
-		}
-		return fullPath, nil
-	}
-	return "", err
-}
-
-func runScript(imgPath, script string) error {
-	cmd := exec.Command(script, imgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

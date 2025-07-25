@@ -1,8 +1,12 @@
+// Package wallhaven provides functionality for interacting with the Wallhaven API
 package wallhaven
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -10,6 +14,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
+
+	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/errors"
 )
 
 // WallpaperID is a string representing a wallpaper
@@ -18,7 +27,7 @@ type WallpaperID string
 // Q is used to hold the Q params for various fulltext options that the WH Search supports
 type Q struct {
 	Tags       []string
-	ExcudeTags []string
+	ExcludeTags []string
 	UserName   string
 	TagID      int
 	Type       string // Type is one of png/jpg
@@ -31,7 +40,7 @@ func (q Q) toQuery() url.Values {
 		sb.WriteString("+")
 		sb.WriteString(tag)
 	}
-	for _, etag := range q.ExcudeTags {
+	for _, etag := range q.ExcludeTags {
 		sb.WriteString("-")
 		sb.WriteString(etag)
 	}
@@ -105,7 +114,13 @@ func (s Search) toQuery() url.Values {
 // Note that this API behaves slightly differently than the various
 // single item apis as it also includes the metadata for paging purposes
 func SearchWallpapers(search *Search) (*SearchResults, error) {
-	resp, err := getWithValues("/search/", search.toQuery())
+	return SearchWallpapersWithContext(context.Background(), search)
+}
+
+// SearchWallpapersWithContext performs a search on WH given a set of criteria with context support.
+func SearchWallpapersWithContext(ctx context.Context, search *Search) (*SearchResults, error) {
+	slog.Debug("Making API request to wallhaven", "endpoint", "/search/")
+	resp, err := getWithValuesAndContext(ctx, "/search/", search.toQuery())
 	if err != nil {
 		return nil, err
 	}
@@ -115,16 +130,23 @@ func SearchWallpapers(search *Search) (*SearchResults, error) {
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("API request successful", "results_count", len(out.Data))
 	return out, nil
 }
 
 func processResponse(resp *http.Response, out interface{}) error {
+	defer resp.Body.Close()
+	
 	byt, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
-	resp.Body.Close()
-	return json.Unmarshal(byt, out)
+	
+	if err := json.Unmarshal(byt, out); err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrInvalidResponse, err)
+	}
+	
+	return nil
 }
 
 // Result Structs -- server responses
@@ -157,44 +179,134 @@ func getWithBase(p string) string {
 }
 
 func getWithValues(p string, v url.Values) (*http.Response, error) {
+	return getWithValuesAndContext(context.Background(), p, v)
+}
+
+func getWithValuesAndContext(ctx context.Context, p string, v url.Values) (*http.Response, error) {
 	u, err := url.Parse(getWithBase(p))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.RawQuery = v.Encode()
-	return getAuthedResponse(u.String())
+	return getAuthedResponseWithContext(ctx, u.String())
 }
 
 func getAuthedResponse(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-API-Key", os.Getenv("WH_API_KEY"))
-	return client.Do(req)
+	return getAuthedResponseWithContext(context.Background(), url)
 }
 
-var client = &http.Client{}
+func getAuthedResponseWithContext(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	if apiKey := os.Getenv("WH_API_KEY"); apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+	req.Header.Set("User-Agent", constants.UserAgent)
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			slog.Debug("Retrying request", "attempt", attempt+1, "url", url)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(retryDelay * time.Duration(attempt)):
+			}
+		}
+		
+		resp, err := client.Do(req)
+		if err != nil {
+			if attempt == maxRetries-1 {
+				return nil, fmt.Errorf("%w: %v", errors.ErrAPIRequest, err)
+			}
+			continue
+		}
+		
+		if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+		
+		resp.Body.Close()
+		
+		if resp.StatusCode >= 500 && attempt < maxRetries-1 {
+			slog.Debug("Server error, retrying", "status_code", resp.StatusCode)
+			continue
+		}
+		
+		return nil, errors.NewAPIError(url, resp.StatusCode, "HTTP request failed")
+	}
+	
+	return nil, errors.NewAPIError(url, 0, "max retries exceeded")
+}
+
+var (
+	client = &http.Client{
+		Timeout: constants.RequestTimeout * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        constants.MaxIdleConns,
+			MaxIdleConnsPerHost: constants.MaxIdleConnsPerHost,
+			IdleConnTimeout:     constants.IdleConnTimeout * time.Second,
+		},
+	}
+	maxRetries = constants.MaxRetries
+	retryDelay = constants.RetryDelaySeconds * time.Second
+
+	// downloadPool limits concurrent downloads
+	downloadPool = make(chan struct{}, 3)
+	downloadMutex sync.Mutex
+)
 
 func download(filepath string, resp *http.Response) error {
 	defer resp.Body.Close()
 
 	out, err := os.Create(filepath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	// Get content length for progress tracking
+	size := resp.ContentLength
+	if size > 0 {
+		slog.Info("Starting download", "size_mb", fmt.Sprintf("%.2f", float64(size)/1024/1024))
+	}
+
+	written, err := io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrDownloadFailed, err)
+	}
+
+	slog.Info("Download completed", "bytes_written", written)
+	return nil
 }
 
 // Download downloads a wallpaper given the local filepath to save the wallpaper to
 func (w *Wallpaper) Download(dir string) error {
-	resp, err := getAuthedResponse(w.Path)
-	if err != nil {
-		return err
+	return w.DownloadWithContext(context.Background(), dir)
+}
+
+func (w *Wallpaper) DownloadWithContext(ctx context.Context, dir string) error {
+	if w.Path == "" {
+		return fmt.Errorf("wallpaper path is empty")
 	}
-	path := filepath.Join(dir, path.Base(w.Path))
-	return download(path, resp)
+	
+	// Acquire download slot to limit concurrent downloads
+	select {
+	case downloadPool <- struct{}{}:
+		defer func() { <-downloadPool }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	
+	filePath := filepath.Join(dir, path.Base(w.Path))
+	slog.Debug("Downloading wallpaper", "url", w.Path, "destination", filePath)
+	
+	resp, err := getAuthedResponseWithContext(ctx, w.Path)
+	if err != nil {
+		return fmt.Errorf("failed to get wallpaper: %w", err)
+	}
+	
+	return download(filePath, resp)
 }

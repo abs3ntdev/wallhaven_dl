@@ -1,0 +1,40 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build the wallhaven_dl binary
+    sources:
+      - "./**/*.go"
+    generates:
+      - "dist/wallhaven_dl"
+    cmds:
+      - go build -o dist/ .
+
+  run:
+    desc: Build and run the application
+    deps: [build]
+    cmds:
+      - ./dist/wallhaven_dl
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf dist
+
+  uninstall:
+    desc: Uninstall the application from system
+    cmds:
+      - sudo rm -f /usr/bin/wallhaven_dl
+      - sudo rm -f /usr/share/zsh/site-functions/_wallhaven_dl
+
+  install:
+    desc: Install the application to system
+    deps: [build]
+    cmds:
+      - sudo cp ./dist/wallhaven_dl /usr/bin
+      - sudo cp ./completions/_wallhaven_dl /usr/share/zsh/site-functions/_wallhaven_dl
