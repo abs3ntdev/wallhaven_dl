@@ -11,7 +11,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
 )
 
 // StatsHandler handles statistics command

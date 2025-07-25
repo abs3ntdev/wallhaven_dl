@@ -11,8 +11,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/executor"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
 )
 
 // FavoritesHandler handles favorites-related commands

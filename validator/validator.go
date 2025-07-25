@@ -2,8 +2,8 @@
 package validator
 
 import (
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
 )
 
 // Validator provides validation methods

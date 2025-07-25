@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
 )
 
 // ScriptExecutor handles script execution

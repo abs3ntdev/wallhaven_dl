@@ -14,13 +14,12 @@ The wallhaven_dl application has been modernized with a clean architecture patte
 │   ├── cleanup.go         # Cleanup handler
 │   ├── favorites.go       # Favorites management
 │   └── rate.go            # Rating handler
-├── internal/              # Internal packages
-│   ├── config/            # Configuration management
-│   ├── constants/         # Application constants
-│   ├── errors/            # Custom error types
-│   ├── executor/          # Script execution
-│   ├── interfaces/        # Dependency injection interfaces
-│   └── validator/         # Input validation
+├── config/                # Configuration management
+├── constants/             # Application constants
+├── errors/                # Custom error types
+├── executor/              # Script execution
+├── interfaces/            # Dependency injection interfaces
+├── validator/             # Input validation
 ├── src/wallhaven/         # Core wallpaper functionality
 │   ├── search.go          # API interaction
 │   └── cache.go           # Caching system
@@ -115,7 +114,7 @@ go build -o wallhaven_dl .
 The modular architecture makes it easy to add new features:
 
 1. Create a new handler in `cmd/`
-2. Add any new constants to `internal/constants/`
-3. Add validation if needed in `internal/validator/`
+2. Add any new constants to `constants/`
+3. Add validation if needed in `validator/`
 4. Wire up the command in `main.go`
 5. Add tests for new functionality

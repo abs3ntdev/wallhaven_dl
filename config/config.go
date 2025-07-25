@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 )
 
 // Config holds application configuration

@@ -12,12 +12,12 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/config"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/errors"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/executor"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/interfaces"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/validator"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
 )
 

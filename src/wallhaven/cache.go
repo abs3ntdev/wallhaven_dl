@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 )
 
 // WallpaperMetadata contains metadata about a cached wallpaper

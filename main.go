@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"git.asdf.cafe/abs3nt/wallhaven_dl/cmd"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/internal/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
 )
 
