@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v3"
 
+	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
 )
@@ -44,10 +44,16 @@ func (h *FavoritesHandler) HandleAdd(ctx context.Context, c *cli.Command) error 
 		return err
 	}
 
-	if current.IsFavorite {
-		fmt.Printf("Added wallpaper to favorites: %s\n", current.Path)
+	// Get updated state after toggling
+	updated := h.cache.GetByID(current.ID)
+	if updated == nil {
+		return fmt.Errorf("failed to retrieve updated wallpaper state")
+	}
+
+	if updated.IsFavorite {
+		fmt.Printf("Added wallpaper to favorites: %s\n", updated.Path)
 	} else {
-		fmt.Printf("Removed wallpaper from favorites: %s\n", current.Path)
+		fmt.Printf("Removed wallpaper from favorites: %s\n", updated.Path)
 	}
 
 	return nil
@@ -103,6 +109,11 @@ func (h *FavoritesHandler) HandleRandom(ctx context.Context, c *cli.Command) err
 		h.logger.Warn("Failed to mark wallpaper as used", "error", err)
 	}
 
+	// Set this as the current view so 'previous' works correctly
+	if err := h.cache.SetCurrentView(favorite.ID); err != nil {
+		h.logger.Warn("Failed to update current view", "error", err)
+	}
+
 	return nil
 }
 
@@ -112,7 +123,7 @@ func (h *FavoritesHandler) GetCommonFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:      "downloadPath",
 			Aliases:   []string{"dp"},
-			Value:     filepath.Join(os.Getenv("HOME"), "Pictures", "Wallpapers"),
+			Value:     config.GetDefaultDownloadPath(),
 			TakesFile: true,
 			Usage:     "Absolute path to download directory",
 		},

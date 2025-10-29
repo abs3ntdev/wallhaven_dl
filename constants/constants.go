@@ -91,7 +91,15 @@ const (
 
 // Cache constants
 const (
-	MaxHistorySize = 100
-	MinRating      = 1
-	MaxRating      = 5
+	MaxHistorySize   = 100
+	MaxCacheSize     = 1000 // Maximum number of wallpapers in cache
+	MaxCacheSizeMB   = 5000 // Maximum cache size in megabytes (5GB)
+	MinRating        = 1
+	MaxRating        = 5
+)
+
+// File permission constants
+const (
+	DirPermissions  = 0o755
+	FilePermissions = 0o644
 )

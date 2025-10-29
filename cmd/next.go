@@ -13,49 +13,49 @@ import (
 	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
 )
 
-// PreviousHandler handles previous wallpaper command
-type PreviousHandler struct {
+// NextHandler handles next wallpaper command
+type NextHandler struct {
 	cache    interfaces.WallpaperCache
 	executor interfaces.ScriptExecutor
 	logger   *slog.Logger
 }
 
-// NewPreviousHandler creates a new previous handler
-func NewPreviousHandler(cache interfaces.WallpaperCache, logger *slog.Logger) *PreviousHandler {
-	return &PreviousHandler{
+// NewNextHandler creates a new next handler
+func NewNextHandler(cache interfaces.WallpaperCache, logger *slog.Logger) *NextHandler {
+	return &NextHandler{
 		cache:    cache,
 		executor: executor.NewScriptExecutor(logger),
 		logger:   logger,
 	}
 }
 
-// Handle processes the previous command
-func (h *PreviousHandler) Handle(ctx context.Context, c *cli.Command) error {
-	previous := h.cache.GetPrevious()
-	if previous == nil {
-		h.logger.Info("No previous wallpaper found")
-		return fmt.Errorf("no previous wallpaper available")
+// Handle processes the next command
+func (h *NextHandler) Handle(ctx context.Context, c *cli.Command) error {
+	next := h.cache.GetNext()
+	if next == nil {
+		h.logger.Info("No next wallpaper found")
+		return fmt.Errorf("no next wallpaper available")
 	}
 
-	h.logger.Info("Switching to previous wallpaper", "path", previous.Path)
+	h.logger.Info("Switching to next wallpaper", "path", next.Path)
 
 	scriptPath := c.String("scriptPath")
 	if scriptPath != "" {
-		if err := h.executor.Execute(scriptPath, previous.Path); err != nil {
+		if err := h.executor.Execute(scriptPath, next.Path); err != nil {
 			return err
 		}
 	}
 
-	// Update the current view to this wallpaper so next 'previous' call goes further back
-	if err := h.cache.SetCurrentView(previous.ID); err != nil {
+	// Update the current view to this wallpaper so next/previous calls work correctly
+	if err := h.cache.SetCurrentView(next.ID); err != nil {
 		h.logger.Warn("Failed to update current view", "error", err)
 	}
 
 	return nil
 }
 
-// GetFlags returns the CLI flags for the previous command
-func (h *PreviousHandler) GetFlags() []cli.Flag {
+// GetFlags returns the CLI flags for the next command
+func (h *NextHandler) GetFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:      "downloadPath",

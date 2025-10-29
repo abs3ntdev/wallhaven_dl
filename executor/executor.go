@@ -28,10 +28,11 @@ func (s *ScriptExecutor) Execute(scriptPath, imagePath string) error {
 	}
 
 	s.logger.Info("Executing script", "script", scriptPath, "image", imagePath)
-	
+
 	cmd := exec.Command(scriptPath, imagePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	// cmd.Env defaults to nil, which means inherit parent environment
 
 	if err := cmd.Run(); err != nil {
 		s.logger.Error("Script execution failed", "error", err, "script", scriptPath)

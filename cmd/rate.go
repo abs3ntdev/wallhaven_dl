@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v3"
 
+	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
@@ -60,7 +60,7 @@ func (h *RateHandler) GetFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:      "downloadPath",
 			Aliases:   []string{"dp"},
-			Value:     filepath.Join(os.Getenv("HOME"), "Pictures", "Wallpapers"),
+			Value:     config.GetDefaultDownloadPath(),
 			TakesFile: true,
 			Usage:     "Absolute path to download directory",
 		},

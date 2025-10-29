@@ -58,11 +58,11 @@ func setupLogger() *slog.Logger {
 }
 
 func initializeCache() (*wallhaven.WallpaperCache, error) {
-	home := os.Getenv("HOME")
-	if home == "" {
-		return nil, fmt.Errorf("HOME environment variable not set")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	
+
 	cacheDir := filepath.Join(home, "Pictures", "Wallpapers", constants.CacheDir)
 	return wallhaven.NewWallpaperCache(cacheDir)
 }
@@ -71,6 +71,8 @@ func createCLIApp(cache *wallhaven.WallpaperCache, logger *slog.Logger) *cli.Com
 	// Initialize handlers
 	searchHandler := cmd.NewSearchHandler(cache, &wallhavenAPI{}, logger)
 	previousHandler := cmd.NewPreviousHandler(cache, logger)
+	nextHandler := cmd.NewNextHandler(cache, logger)
+	historyHandler := cmd.NewHistoryHandler(cache, logger)
 	statsHandler := cmd.NewStatsHandler(cache, logger)
 	cleanupHandler := cmd.NewCleanupHandler(cache, logger)
 	favoritesHandler := cmd.NewFavoritesHandler(cache, logger)
@@ -97,6 +99,24 @@ func createCLIApp(cache *wallhaven.WallpaperCache, logger *slog.Logger) *cli.Com
 				Flags:   previousHandler.GetFlags(),
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return previousHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "next",
+				Aliases: []string{"n"},
+				Usage:   "Switch forward to the next wallpaper in history",
+				Flags:   nextHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return nextHandler.Handle(ctx, c)
+				},
+			},
+			{
+				Name:    "history",
+				Aliases: []string{"hist"},
+				Usage:   "View wallpaper history and select one to apply",
+				Flags:   historyHandler.GetFlags(),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return historyHandler.Handle(ctx, c)
 				},
 			},
 			{

@@ -5,16 +5,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v3"
 
+	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
 )
 
 // CleanupHandler handles cleanup command
@@ -134,14 +134,14 @@ func (h *CleanupHandler) GetFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:      "downloadPath",
 			Aliases:   []string{"dp"},
-			Value:     filepath.Join(os.Getenv("HOME"), "Pictures", "Wallpapers"),
+			Value:     config.GetDefaultDownloadPath(),
 			TakesFile: true,
 			Usage:     "Absolute path to download directory",
 		},
 		&cli.StringFlag{
 			Name:  "mode",
 			Value: constants.CleanupModeUnused,
-			Usage: "Cleanup mode: " + joinValidValues(constants.ValidCleanupModes),
+			Usage: "Cleanup mode: " + strings.Join(constants.ValidCleanupModes, ", "),
 		},
 		&cli.StringFlag{
 			Name:  "olderThan",

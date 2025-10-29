@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v3"
@@ -17,8 +17,8 @@ import (
 	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
 	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
 )
 
 // SearchHandler handles search-related commands
@@ -68,14 +68,19 @@ func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 
 	h.logger.Info("Wallpaper ready", "path", filePath)
 
+	// Execute script if provided - non-fatal if it fails
 	if err := h.executeScript(cfg.ScriptPath, filePath); err != nil {
-		return err
+		h.logger.Warn("Script execution failed, but wallpaper was downloaded successfully", "error", err)
 	}
 
 	if wallpaper != nil {
 		id := wallhaven.GenerateID(wallpaper.Path)
 		if err := h.cache.MarkAsUsed(id); err != nil {
 			h.logger.Warn("Failed to mark wallpaper as used", "error", err)
+		}
+		// Set this as the current view so 'previous' works correctly
+		if err := h.cache.SetCurrentView(id); err != nil {
+			h.logger.Warn("Failed to update current view", "error", err)
 		}
 	}
 
@@ -84,7 +89,7 @@ func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 
 func (h *SearchHandler) buildConfig(c *cli.Command) (*config.Config, error) {
 	cfg := config.NewConfig()
-	
+
 	// Override with CLI values
 	cfg.Range = c.String("range")
 	cfg.Purity = c.String("purity")
@@ -103,7 +108,7 @@ func (h *SearchHandler) buildConfig(c *cli.Command) (*config.Config, error) {
 func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Config, query string) (*wallhaven.Wallpaper, string, error) {
 	seed := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(seed)
-	
+
 	search := &wallhaven.Search{
 		Categories: cfg.Categories,
 		Purities:   cfg.Purity,
@@ -112,7 +117,7 @@ func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Confi
 		TopRange:   cfg.Range,
 		AtLeast:    cfg.AtLeast,
 		Ratios:     cfg.Ratios,
-		Page:       int64(rand.Intn(cfg.Page) + 1),
+		Page:       int64(r.Intn(cfg.Page) + 1),
 	}
 
 	if query != "" {
@@ -128,10 +133,10 @@ func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Confi
 	}
 
 	h.logger.Info("Found wallpapers", "count", len(results.Data))
-	return h.getOrDownloadWithCache(results, r, cfg.DownloadPath, cfg.Categories, cfg.Purity)
+	return h.getOrDownloadWithCache(ctx, results, r, cfg.DownloadPath, cfg.Categories, cfg.Purity)
 }
 
-func (h *SearchHandler) getOrDownloadWithCache(results *wallhaven.SearchResults, r *rand.Rand, downloadPath, categories, purities string) (*wallhaven.Wallpaper, string, error) {
+func (h *SearchHandler) getOrDownloadWithCache(ctx context.Context, results *wallhaven.SearchResults, r *rand.Rand, downloadPath, categories, purities string) (*wallhaven.Wallpaper, string, error) {
 	if len(results.Data) == 0 {
 		return nil, "", errors.ErrNoWallpapersFound
 	}
@@ -145,10 +150,17 @@ func (h *SearchHandler) getOrDownloadWithCache(results *wallhaven.SearchResults,
 
 	if _, err := os.Stat(fullPath); err == nil {
 		h.logger.Info("Using existing wallpaper", "path", fullPath)
+		// Ensure the wallpaper is in the cache (may be missing if migrated from old cache)
+		id := wallhaven.GenerateID(result.Path)
+		if existing := h.cache.GetByID(id); existing == nil {
+			if err := h.cache.AddWallpaper(&result, fullPath, categories, purities); err != nil {
+				h.logger.Warn("Failed to add existing wallpaper to cache", "error", err)
+			}
+		}
 		return &result, fullPath, nil
 	}
 
-	if err := result.DownloadWithContext(context.Background(), downloadPath); err != nil {
+	if err := result.DownloadWithContext(ctx, downloadPath); err != nil {
 		return nil, "", err
 	}
 
@@ -174,21 +186,21 @@ func (h *SearchHandler) executeScript(scriptPath, imagePath string) error {
 	if scriptPath == "" {
 		return nil
 	}
-	
+
 	return h.executor.Execute(scriptPath, imagePath)
 }
 
 // GetFlags returns the CLI flags for the search command
 func (h *SearchHandler) GetFlags() []cli.Flag {
 	v := validator.NewValidator()
-	
+
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:      "range",
 			Aliases:   []string{"r"},
 			Value:     constants.DefaultRange,
 			Validator: v.ValidateRange,
-			Usage:     "Time range for top sorting (" + joinValidValues(constants.ValidRanges) + ")",
+			Usage:     "Time range for top sorting (" + strings.Join(constants.ValidRanges, ", ") + ")",
 		},
 		&cli.StringFlag{
 			Name:      "purity",
@@ -209,14 +221,14 @@ func (h *SearchHandler) GetFlags() []cli.Flag {
 			Aliases:   []string{"s"},
 			Value:     constants.DefaultSort,
 			Validator: v.ValidateSort,
-			Usage:     "Sort order: " + joinValidValues(constants.ValidSorts),
+			Usage:     "Sort order: " + strings.Join(constants.ValidSorts, ", "),
 		},
 		&cli.StringFlag{
 			Name:      "order",
 			Aliases:   []string{"o"},
 			Value:     constants.DefaultOrder,
 			Validator: v.ValidateOrder,
-			Usage:     "Order of the wallpapers: " + joinValidValues(constants.ValidOrders),
+			Usage:     "Order of the wallpapers: " + strings.Join(constants.ValidOrders, ", "),
 		},
 		&cli.IntFlag{
 			Name:    "page",
@@ -246,21 +258,9 @@ func (h *SearchHandler) GetFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:      "downloadPath",
 			Aliases:   []string{"dp"},
-			Value:     filepath.Join(os.Getenv("HOME"), "Pictures", "Wallpapers"),
+			Value:     config.GetDefaultDownloadPath(),
 			TakesFile: true,
 			Usage:     "Absolute path to download directory",
 		},
 	}
-}
-
-// Helper function to join valid values for help text
-func joinValidValues(values []string) string {
-	result := ""
-	for i, v := range values {
-		if i > 0 {
-			result += ", "
-		}
-		result += v
-	}
-	return result
 }

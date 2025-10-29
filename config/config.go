@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
 )
@@ -36,6 +37,16 @@ type Config struct {
 	LogLevel string `json:"log_level"`
 }
 
+// GetDefaultDownloadPath returns the default download path
+func GetDefaultDownloadPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory if home dir cannot be determined
+		home = "."
+	}
+	return filepath.Join(home, "Pictures", "Wallpapers")
+}
+
 // NewConfig creates a new configuration with defaults
 func NewConfig() *Config {
 	return &Config{
@@ -47,7 +58,7 @@ func NewConfig() *Config {
 		Page:            constants.DefaultMaxPages,
 		Ratios:          constants.DefaultRatios,
 		AtLeast:         constants.DefaultAtLeast,
-		DownloadPath:    filepath.Join(os.Getenv("HOME"), "Pictures", "Wallpapers"),
+		DownloadPath:    GetDefaultDownloadPath(),
 		ScriptPath:      "",
 		CleanupMode:     constants.CleanupModeUnused,
 		CleanupOlderThan: constants.DefaultCleanupOlderThan,
@@ -83,7 +94,7 @@ func (c *Config) validateRange() error {
 			return nil
 		}
 	}
-	return NewValidationError("range", c.Range, "must be one of: "+joinStrings(constants.ValidRanges))
+	return NewValidationError("range", c.Range, "must be one of: "+strings.Join(constants.ValidRanges, ", "))
 }
 
 func (c *Config) validatePurity() error {
@@ -116,7 +127,7 @@ func (c *Config) validateSort() error {
 			return nil
 		}
 	}
-	return NewValidationError("sort", c.Sort, "must be one of: "+joinStrings(constants.ValidSorts))
+	return NewValidationError("sort", c.Sort, "must be one of: "+strings.Join(constants.ValidSorts, ", "))
 }
 
 func (c *Config) validateOrder() error {
@@ -125,7 +136,7 @@ func (c *Config) validateOrder() error {
 			return nil
 		}
 	}
-	return NewValidationError("order", c.Order, "must be one of: "+joinStrings(constants.ValidOrders))
+	return NewValidationError("order", c.Order, "must be one of: "+strings.Join(constants.ValidOrders, ", "))
 }
 
 func (c *Config) validatePaths() error {
@@ -142,17 +153,6 @@ func (c *Config) validatePaths() error {
 	return nil
 }
 
-// Helper functions
-func joinStrings(strings []string) string {
-	result := ""
-	for i, s := range strings {
-		if i > 0 {
-			result += ", "
-		}
-		result += s
-	}
-	return result
-}
 
 // ValidationError represents a configuration validation error
 type ValidationError struct {

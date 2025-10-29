@@ -19,8 +19,15 @@ type WallpaperCache interface {
 	// Retrieval operations
 	GetCurrent() *wallhaven.WallpaperMetadata
 	GetPrevious() *wallhaven.WallpaperMetadata
+	GetNext() *wallhaven.WallpaperMetadata
+	GetByID(id string) *wallhaven.WallpaperMetadata
+	GetHistory(limit int) []*wallhaven.WallpaperMetadata
 	FindDuplicate(hash string) *wallhaven.WallpaperMetadata
 	GetStatistics() map[string]interface{}
+
+	// View state management
+	SetCurrentView(wallpaperID string) error
+	GetCurrentView() string
 
 	// Cleanup operations
 	GetOldWallpapers(olderThan time.Duration) []*wallhaven.WallpaperMetadata
