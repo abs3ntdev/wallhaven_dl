@@ -1,6 +1,6 @@
 # wallhaven_dl
 
-this is a tool for downloading images from wallhaven and then passing the download path to a scrip to run(to set the wallpaper, run pywal, whatever) :)
+this is a tool for downloading images from wallhaven and then passing the download path to a scrip to run(to set the wallpaper, run pywal, whatever)
 
 ```
 Usage:
