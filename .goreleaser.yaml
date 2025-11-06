@@ -1,7 +1,8 @@
-gitea_urls:
-  api: https://git.asdf.cafe/api/v1
-  download: https://git.asdf.cafe
-  skip_tls_verify: false
+# Remove or comment out the gitea_urls section - not needed for GitHub
+# gitea_urls:
+#   api: https://git.asdf.cafe/api/v1
+#   download: https://git.asdf.cafe
+#   skip_tls_verify: false
 
 before:
   hooks:
@@ -30,10 +31,13 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+
 checksum:
   name_template: "checksums.txt"
+
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
+
 changelog:
   sort: asc
   groups:

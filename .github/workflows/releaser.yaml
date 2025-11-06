@@ -1,5 +1,5 @@
 name: deployer
-run-name: ${{ gitea.actor }} is releasing
+run-name: ${{ github.actor }} is releasing
 on:
   push:
     tags:
@@ -25,4 +25,4 @@ jobs:
           version: nightly
           args: release --clean
         env:
-          GITEA_TOKEN: ${{ secrets.ACCESS_TOKEN_GITEA}}
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN_GITHUB}}
