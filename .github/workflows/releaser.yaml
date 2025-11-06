@@ -8,6 +8,8 @@ on:
 jobs:
   go-releaser:
     runs-on: self-hosted
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,4 +27,4 @@ jobs:
           version: nightly
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN_GITHUB}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
