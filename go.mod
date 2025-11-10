@@ -3,7 +3,7 @@ module git.asdf.cafe/abs3nt/wallhaven_dl
 go 1.25.4
 
 require (
-	github.com/urfave/cli/v3 v3.5.0
+	github.com/urfave/cli/v3 v3.6.0
 	modernc.org/sqlite v1.40.0
 )
 
