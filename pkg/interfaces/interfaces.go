@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/wallhaven"
 )
 
 // WallpaperCache defines the interface for wallpaper caching operations
@@ -23,7 +23,7 @@ type WallpaperCache interface {
 	GetByID(id string) *wallhaven.WallpaperMetadata
 	GetHistory(limit int) []*wallhaven.WallpaperMetadata
 	FindDuplicate(hash string) *wallhaven.WallpaperMetadata
-	GetStatistics() map[string]interface{}
+	GetStatistics() *wallhaven.Statistics
 
 	// View state management
 	SetCurrentView(wallpaperID string) error
@@ -55,39 +55,4 @@ type WallpaperAPI interface {
 // ScriptExecutor defines the interface for script execution
 type ScriptExecutor interface {
 	Execute(scriptPath, imagePath string) error
-}
-
-// Logger defines the interface for logging operations
-type Logger interface {
-	Debug(msg string, args ...interface{})
-	Info(msg string, args ...interface{})
-	Warn(msg string, args ...interface{})
-	Error(msg string, args ...interface{})
-}
-
-// FileSystem defines the interface for file system operations
-type FileSystem interface {
-	Exists(path string) bool
-	MkdirAll(path string, perm int) error
-	Remove(path string) error
-	Stat(path string) (FileInfo, error)
-}
-
-// FileInfo represents file information
-type FileInfo interface {
-	Size() int64
-	ModTime() time.Time
-	IsDir() bool
-	Name() string
-}
-
-// Validator defines the interface for input validation
-type Validator interface {
-	ValidateRange(value string) error
-	ValidatePurity(value string) error
-	ValidateCategories(value string) error
-	ValidateSort(value string) error
-	ValidateOrder(value string) error
-	ValidateRating(value int) error
-	ValidateCleanupMode(value string) error
 }

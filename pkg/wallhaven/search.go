@@ -14,11 +14,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/errors"
 )
 
 // WallpaperID is a string representing a wallpaper
@@ -35,10 +34,7 @@ type Q struct {
 }
 
 func (q Q) toQuery() url.Values {
-	// Pre-allocate capacity: estimate average tag length + prefixes
-	capacity := len(q.Tags)*10 + len(q.ExcludeTags)*10 + len(q.UserName) + len(q.Type) + 10
 	var sb strings.Builder
-	sb.Grow(capacity)
 
 	for _, tag := range q.Tags {
 		sb.WriteString("+")
@@ -57,8 +53,7 @@ func (q Q) toQuery() url.Values {
 		sb.WriteString(q.Type)
 	}
 	out := url.Values{}
-	val := sb.String()
-	if len(val) > 0 {
+	if val := sb.String(); len(val) > 0 {
 		out.Set("q", val)
 	}
 	return out
@@ -106,7 +101,7 @@ func (s Search) toQuery() url.Values {
 		v.Add("ratios", strings.Join(s.Ratios, ","))
 	}
 	if len(s.Colors) > 0 {
-		v.Add("colors", strings.Join([]string(s.Colors), ","))
+		v.Add("colors", strings.Join(s.Colors, ","))
 	}
 	if s.Page > 0 {
 		v.Add("page", strconv.FormatInt(s.Page, 10))
@@ -115,30 +110,23 @@ func (s Search) toQuery() url.Values {
 }
 
 // SearchWallpapers performs a search on WH given a set of criteria.
-// Note that this API behaves slightly differently than the various
-// single item apis as it also includes the metadata for paging purposes
-func SearchWallpapers(search *Search) (*SearchResults, error) {
-	return SearchWallpapersWithContext(context.Background(), search)
-}
-
-// SearchWallpapersWithContext performs a search on WH given a set of criteria with context support.
-func SearchWallpapersWithContext(ctx context.Context, search *Search) (*SearchResults, error) {
-	slog.Debug("Making API request to wallhaven", "endpoint", "/search/")
-	resp, err := getWithValuesAndContext(ctx, "/search/", search.toQuery())
+// The response includes paging metadata in Meta.
+func SearchWallpapers(ctx context.Context, search *Search) (*SearchResults, error) {
+	slog.Debug("Making API request to wallhaven", "endpoint", "/search/", "page", search.Page)
+	resp, err := getWithValues(ctx, "/search/", search.toQuery())
 	if err != nil {
 		return nil, err
 	}
 
 	out := &SearchResults{}
-	err = processResponse(resp, out)
-	if err != nil {
+	if err := processResponse(resp, out); err != nil {
 		return nil, err
 	}
-	slog.Debug("API request successful", "results_count", len(out.Data))
+	slog.Debug("API request successful", "results_count", len(out.Data), "last_page", out.Meta.LastPage)
 	return out, nil
 }
 
-func processResponse(resp *http.Response, out interface{}) error {
+func processResponse(resp *http.Response, out any) error {
 	defer resp.Body.Close()
 
 	byt, err := io.ReadAll(resp.Body)
@@ -155,9 +143,18 @@ func processResponse(resp *http.Response, out interface{}) error {
 
 // Result Structs -- server responses
 
+// Meta contains paging metadata returned by the search endpoint
+type Meta struct {
+	CurrentPage int64 `json:"current_page"`
+	LastPage    int64 `json:"last_page"`
+	PerPage     int64 `json:"per_page"`
+	Total       int64 `json:"total"`
+}
+
 // SearchResults a wrapper containing search results from wh
 type SearchResults struct {
 	Data []Wallpaper `json:"data"`
+	Meta Meta        `json:"meta"`
 }
 
 // Wallpaper information about a given wallpaper
@@ -165,42 +162,19 @@ type Wallpaper struct {
 	Path string `json:"path"`
 }
 
-// Tag full data on a given wallpaper tag
-type Tag struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	Alias      string `json:"alias"`
-	CategoryID int    `json:"category_id"`
-	Category   string `json:"category"`
-	Purity     string `json:"purity"`
-	CreatedAt  string `json:"created_at"`
-}
-
 const baseURL = "https://wallhaven.cc/api/v1"
 
-func getWithBase(p string) string {
-	return baseURL + p
-}
-
-func getWithValues(p string, v url.Values) (*http.Response, error) {
-	return getWithValuesAndContext(context.Background(), p, v)
-}
-
-func getWithValuesAndContext(ctx context.Context, p string, v url.Values) (*http.Response, error) {
-	u, err := url.Parse(getWithBase(p))
+func getWithValues(ctx context.Context, p string, v url.Values) (*http.Response, error) {
+	u, err := url.Parse(baseURL + p)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 	u.RawQuery = v.Encode()
-	return getAuthedResponseWithContext(ctx, u.String())
+	return getAuthedResponse(ctx, u.String())
 }
 
-func getAuthedResponse(url string) (*http.Response, error) {
-	return getAuthedResponseWithContext(context.Background(), url)
-}
-
-func getAuthedResponseWithContext(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func getAuthedResponse(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -210,7 +184,7 @@ func getAuthedResponseWithContext(ctx context.Context, url string) (*http.Respon
 	}
 	req.Header.Set("User-Agent", constants.UserAgent)
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		if attempt > 0 {
 			slog.Debug("Retrying request", "attempt", attempt+1, "url", url)
 			select {
@@ -256,61 +230,54 @@ var (
 	}
 	maxRetries = constants.MaxRetries
 	retryDelay = constants.RetryDelaySeconds * time.Second
-
-	// downloadPool limits concurrent downloads
-	downloadPool  = make(chan struct{}, 3)
-	downloadMutex sync.Mutex
 )
 
-func download(filepath string, resp *http.Response) error {
+func writeToFile(dest string, resp *http.Response) error {
 	defer resp.Body.Close()
 
-	out, err := os.Create(filepath)
+	tmp, err := os.CreateTemp(filepath.Dir(dest), ".wallhaven_dl-*")
 	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}()
 
-	// Get content length for progress tracking
-	size := resp.ContentLength
-	if size > 0 {
+	if size := resp.ContentLength; size > 0 {
 		slog.Info("Starting download", "size_mb", fmt.Sprintf("%.2f", float64(size)/1024/1024))
 	}
 
-	written, err := io.Copy(out, resp.Body)
+	written, err := io.Copy(tmp, resp.Body)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errors.ErrDownloadFailed, err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmp.Name(), dest); err != nil {
+		return fmt.Errorf("failed to move downloaded file into place: %w", err)
 	}
 
 	slog.Info("Download completed", "bytes_written", written)
 	return nil
 }
 
-// Download downloads a wallpaper given the local filepath to save the wallpaper to
-func (w *Wallpaper) Download(dir string) error {
-	return w.DownloadWithContext(context.Background(), dir)
-}
-
-func (w *Wallpaper) DownloadWithContext(ctx context.Context, dir string) error {
+// Download downloads a wallpaper into the given directory
+func (w *Wallpaper) Download(ctx context.Context, dir string) error {
 	if w.Path == "" {
 		return fmt.Errorf("wallpaper path is empty")
-	}
-
-	// Acquire download slot to limit concurrent downloads
-	select {
-	case downloadPool <- struct{}{}:
-		defer func() { <-downloadPool }()
-	case <-ctx.Done():
-		return ctx.Err()
 	}
 
 	filePath := filepath.Join(dir, path.Base(w.Path))
 	slog.Debug("Downloading wallpaper", "url", w.Path, "destination", filePath)
 
-	resp, err := getAuthedResponseWithContext(ctx, w.Path)
+	resp, err := getAuthedResponse(ctx, w.Path)
 	if err != nil {
 		return fmt.Errorf("failed to get wallpaper: %w", err)
 	}
 
-	return download(filePath, resp)
+	return writeToFile(filePath, resp)
 }

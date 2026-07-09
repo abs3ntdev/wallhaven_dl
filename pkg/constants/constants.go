@@ -20,12 +20,12 @@ var ValidRanges = []string{
 
 // Sort order constants
 const (
-	SortRelevance  = "relevance"
-	SortRandom     = "random"
-	SortDateAdded  = "date_added"
-	SortViews      = "views"
-	SortFavorites  = "favorites"
-	SortToplist    = "toplist"
+	SortRelevance = "relevance"
+	SortRandom    = "random"
+	SortDateAdded = "date_added"
+	SortViews     = "views"
+	SortFavorites = "favorites"
+	SortToplist   = "toplist"
 )
 
 // Valid sort orders
@@ -57,13 +57,13 @@ var ValidCleanupModes = []string{
 
 // Default values
 const (
-	DefaultRange          = Range1Year
-	DefaultPurity         = "110" // SFW + Sketchy
-	DefaultCategories     = "010" // Anime only
-	DefaultSort           = SortToplist
-	DefaultOrder          = OrderDesc
-	DefaultMaxPages       = 5
-	DefaultAtLeast        = "2560x1440"
+	DefaultRange            = Range1Year
+	DefaultPurity           = "110" // SFW + Sketchy
+	DefaultCategories       = "010" // Anime only
+	DefaultSort             = SortToplist
+	DefaultOrder            = OrderDesc
+	DefaultMaxPages         = 5
+	DefaultAtLeast          = "2560x1440"
 	DefaultCleanupOlderThan = "30d"
 )
 
@@ -72,34 +72,30 @@ var DefaultRatios = []string{"16x9", "16x10"}
 
 // Application constants
 const (
-	AppName     = "wallhaven_dl"
-	AppVersion  = "2.0.0"
-	UserAgent   = "wallhaven_dl/2.0"
-	CacheDir    = ".cache"
-	MetadataFile = "metadata.json"
+	AppName   = "wallhaven_dl"
+	UserAgent = "wallhaven_dl/2.0"
+	CacheDir  = ".cache"
 )
 
 // HTTP constants
 const (
-	MaxRetries        = 3
-	RequestTimeout    = 30 // seconds
-	MaxIdleConns      = 10
+	MaxRetries          = 3
+	RequestTimeout      = 30 // seconds
+	MaxIdleConns        = 10
 	MaxIdleConnsPerHost = 2
-	IdleConnTimeout   = 30 // seconds
-	RetryDelaySeconds = 1
+	IdleConnTimeout     = 30 // seconds
+	RetryDelaySeconds   = 1
 )
 
 // Cache constants
 const (
-	MaxHistorySize   = 100
-	MaxCacheSize     = 1000 // Maximum number of wallpapers in cache
-	MaxCacheSizeMB   = 5000 // Maximum cache size in megabytes (5GB)
-	MinRating        = 1
-	MaxRating        = 5
+	MaxCacheSize   = 1000 // Maximum number of wallpapers in cache
+	MaxCacheSizeMB = 5000 // Maximum cache size in megabytes (5GB)
+	MinRating      = 1
+	MaxRating      = 5
 )
 
 // File permission constants
 const (
-	DirPermissions  = 0o755
-	FilePermissions = 0o644
+	DirPermissions = 0o755
 )

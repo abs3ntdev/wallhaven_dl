@@ -8,9 +8,9 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/config"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/executor"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/interfaces"
 )
 
 // PreviousHandler handles previous wallpaper command

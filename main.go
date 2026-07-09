@@ -11,19 +11,19 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"git.asdf.cafe/abs3nt/wallhaven_dl/cmd"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/wallhaven"
 )
 
 // wallhavenAPI implements the WallpaperAPI interface
 type wallhavenAPI struct{}
 
 func (api *wallhavenAPI) SearchWallpapers(ctx context.Context, search *wallhaven.Search) (*wallhaven.SearchResults, error) {
-	return wallhaven.SearchWallpapersWithContext(ctx, search)
+	return wallhaven.SearchWallpapers(ctx, search)
 }
 
 func (api *wallhavenAPI) DownloadWallpaper(ctx context.Context, wallpaper *wallhaven.Wallpaper, dir string) error {
-	return wallpaper.DownloadWithContext(ctx, dir)
+	return wallpaper.Download(ctx, dir)
 }
 
 var Version = "dev"
@@ -39,8 +39,12 @@ func main() {
 	}
 
 	app := createCLIApp(cache, logger)
-	
-	if err := app.Run(context.Background(), os.Args); err != nil {
+
+	err = app.Run(context.Background(), os.Args)
+	if closeErr := cache.Close(); closeErr != nil {
+		logger.Warn("Failed to close cache", "error", closeErr)
+	}
+	if err != nil {
 		logger.Error("Application failed", "error", err)
 		os.Exit(1)
 	}

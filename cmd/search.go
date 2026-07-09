@@ -4,40 +4,37 @@ package cmd
 import (
 	"context"
 	"log/slog"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/executor"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/src/wallhaven"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/config"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/executor"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/wallhaven"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/validator"
 )
 
 // SearchHandler handles search-related commands
 type SearchHandler struct {
-	cache     interfaces.WallpaperCache
-	api       interfaces.WallpaperAPI
-	executor  interfaces.ScriptExecutor
-	validator interfaces.Validator
-	logger    *slog.Logger
+	cache    interfaces.WallpaperCache
+	api      interfaces.WallpaperAPI
+	executor interfaces.ScriptExecutor
+	logger   *slog.Logger
 }
 
 // NewSearchHandler creates a new search handler
 func NewSearchHandler(cache interfaces.WallpaperCache, api interfaces.WallpaperAPI, logger *slog.Logger) *SearchHandler {
 	return &SearchHandler{
-		cache:     cache,
-		api:       api,
-		executor:  executor.NewScriptExecutor(logger),
-		validator: validator.NewValidator(),
-		logger:    logger,
+		cache:    cache,
+		api:      api,
+		executor: executor.NewScriptExecutor(logger),
+		logger:   logger,
 	}
 }
 
@@ -45,16 +42,7 @@ func NewSearchHandler(cache interfaces.WallpaperCache, api interfaces.WallpaperA
 func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 	h.logger.Info("Starting wallpaper search")
 
-	cfg, err := h.buildConfig(c)
-	if err != nil {
-		h.logger.Error("Failed to build configuration", "error", err)
-		return err
-	}
-
-	if err := cfg.Validate(); err != nil {
-		h.logger.Error("Configuration validation failed", "error", err)
-		return err
-	}
+	cfg := h.buildConfig(c)
 
 	if err := h.cache.CleanupInvalidEntries(); err != nil {
 		h.logger.Warn("Failed to cleanup invalid cache entries", "error", err)
@@ -68,7 +56,6 @@ func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 
 	h.logger.Info("Wallpaper ready", "path", filePath)
 
-	// Execute script if provided - non-fatal if it fails
 	if err := h.executeScript(cfg.ScriptPath, filePath); err != nil {
 		h.logger.Warn("Script execution failed, but wallpaper was downloaded successfully", "error", err)
 	}
@@ -78,7 +65,6 @@ func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 		if err := h.cache.MarkAsUsed(id); err != nil {
 			h.logger.Warn("Failed to mark wallpaper as used", "error", err)
 		}
-		// Set this as the current view so 'previous' works correctly
 		if err := h.cache.SetCurrentView(id); err != nil {
 			h.logger.Warn("Failed to update current view", "error", err)
 		}
@@ -87,28 +73,24 @@ func (h *SearchHandler) Handle(ctx context.Context, c *cli.Command) error {
 	return nil
 }
 
-func (h *SearchHandler) buildConfig(c *cli.Command) (*config.Config, error) {
+func (h *SearchHandler) buildConfig(c *cli.Command) *config.Config {
 	cfg := config.NewConfig()
 
-	// Override with CLI values
 	cfg.Range = c.String("range")
 	cfg.Purity = c.String("purity")
 	cfg.Categories = c.String("categories")
 	cfg.Sort = c.String("sort")
 	cfg.Order = c.String("order")
-	cfg.Page = c.Int("page")
+	cfg.MaxPages = c.Int("page")
 	cfg.Ratios = c.StringSlice("ratios")
 	cfg.AtLeast = c.String("atLeast")
 	cfg.DownloadPath = c.String("downloadPath")
 	cfg.ScriptPath = c.String("scriptPath")
 
-	return cfg, nil
+	return cfg
 }
 
 func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Config, query string) (*wallhaven.Wallpaper, string, error) {
-	seed := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(seed)
-
 	search := &wallhaven.Search{
 		Categories: cfg.Categories,
 		Purities:   cfg.Purity,
@@ -117,7 +99,7 @@ func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Confi
 		TopRange:   cfg.Range,
 		AtLeast:    cfg.AtLeast,
 		Ratios:     cfg.Ratios,
-		Page:       int64(r.Intn(cfg.Page) + 1),
+		Page:       1,
 	}
 
 	if query != "" {
@@ -126,31 +108,46 @@ func (h *SearchHandler) searchAndDownload(ctx context.Context, cfg *config.Confi
 		}
 	}
 
-	h.logger.Debug("Searching wallpapers", "query", query, "page", search.Page)
-	results, err := wallhaven.SearchWallpapersWithContext(ctx, search)
+	h.logger.Debug("Searching wallpapers", "query", query, "max_pages", cfg.MaxPages)
+	results, err := h.api.SearchWallpapers(ctx, search)
 	if err != nil {
 		return nil, "", err
 	}
 
-	h.logger.Info("Found wallpapers", "count", len(results.Data))
-	return h.getOrDownloadWithCache(ctx, results, r, cfg.DownloadPath, cfg.Categories, cfg.Purity)
+	maxPage := min(int64(cfg.MaxPages), results.Meta.LastPage)
+	if maxPage > 1 {
+		if page := rand.Int64N(maxPage) + 1; page > 1 {
+			search.Page = page
+			h.logger.Debug("Fetching random page", "page", page, "available_pages", results.Meta.LastPage)
+			results, err = h.api.SearchWallpapers(ctx, search)
+			if err != nil {
+				return nil, "", err
+			}
+		}
+	}
+
+	h.logger.Info("Found wallpapers", "count", len(results.Data), "page", search.Page)
+	return h.getOrDownloadWithCache(ctx, results, cfg.DownloadPath, cfg.Categories, cfg.Purity)
 }
 
-func (h *SearchHandler) getOrDownloadWithCache(ctx context.Context, results *wallhaven.SearchResults, r *rand.Rand, downloadPath, categories, purities string) (*wallhaven.Wallpaper, string, error) {
+func (h *SearchHandler) getOrDownloadWithCache(
+	ctx context.Context,
+	results *wallhaven.SearchResults,
+	downloadPath, categories, purities string,
+) (*wallhaven.Wallpaper, string, error) {
 	if len(results.Data) == 0 {
 		return nil, "", errors.ErrNoWallpapersFound
 	}
 
-	if err := os.MkdirAll(downloadPath, 0o755); err != nil {
+	if err := os.MkdirAll(downloadPath, constants.DirPermissions); err != nil {
 		return nil, "", err
 	}
 
-	result := results.Data[r.Intn(len(results.Data))]
+	result := results.Data[rand.IntN(len(results.Data))]
 	fullPath := path.Join(downloadPath, path.Base(result.Path))
 
 	if _, err := os.Stat(fullPath); err == nil {
 		h.logger.Info("Using existing wallpaper", "path", fullPath)
-		// Ensure the wallpaper is in the cache (may be missing if migrated from old cache)
 		id := wallhaven.GenerateID(result.Path)
 		if existing := h.cache.GetByID(id); existing == nil {
 			if err := h.cache.AddWallpaper(&result, fullPath, categories, purities); err != nil {
@@ -160,7 +157,7 @@ func (h *SearchHandler) getOrDownloadWithCache(ctx context.Context, results *wal
 		return &result, fullPath, nil
 	}
 
-	if err := result.DownloadWithContext(ctx, downloadPath); err != nil {
+	if err := h.api.DownloadWallpaper(ctx, &result, downloadPath); err != nil {
 		return nil, "", err
 	}
 
@@ -231,10 +228,11 @@ func (h *SearchHandler) GetFlags() []cli.Flag {
 			Usage:     "Order of the wallpapers: " + strings.Join(constants.ValidOrders, ", "),
 		},
 		&cli.IntFlag{
-			Name:    "page",
-			Aliases: []string{"pg"},
-			Value:   constants.DefaultMaxPages,
-			Usage:   "Max pages to randomly select from (1-100)",
+			Name:      "page",
+			Aliases:   []string{"pg", "maxPages"},
+			Value:     constants.DefaultMaxPages,
+			Validator: v.ValidatePage,
+			Usage:     "Maximum number of pages to randomly sample from (capped at the pages available)",
 		},
 		&cli.StringSliceFlag{
 			Name:    "ratios",
@@ -253,6 +251,7 @@ func (h *SearchHandler) GetFlags() []cli.Flag {
 			Aliases:   []string{"sp"},
 			Value:     "",
 			TakesFile: true,
+			Validator: v.ValidateScriptPath,
 			Usage:     "Path to the script to run after downloading",
 		},
 		&cli.StringFlag{

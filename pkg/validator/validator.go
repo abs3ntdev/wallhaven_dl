@@ -2,8 +2,12 @@
 package validator
 
 import (
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
+	"os"
+	"strconv"
+	"strings"
+
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/errors"
 )
 
 // Validator provides validation methods
@@ -21,30 +25,26 @@ func (v *Validator) ValidateRange(value string) error {
 			return nil
 		}
 	}
-	return errors.NewValidationError("range", value, "must be one of: "+joinStrings(constants.ValidRanges))
+	return errors.NewValidationError("range", value, "must be one of: "+strings.Join(constants.ValidRanges, ", "))
 }
 
 // ValidatePurity validates purity parameter
 func (v *Validator) ValidatePurity(value string) error {
-	if len(value) != 3 {
-		return errors.NewValidationError("purity", value, "must be 3 characters long")
-	}
-	for _, char := range value {
-		if char != '0' && char != '1' {
-			return errors.NewValidationError("purity", value, "must contain only '0' and '1'")
-		}
-	}
-	return nil
+	return validateBitString("purity", value)
 }
 
 // ValidateCategories validates categories parameter
 func (v *Validator) ValidateCategories(value string) error {
+	return validateBitString("categories", value)
+}
+
+func validateBitString(field, value string) error {
 	if len(value) != 3 {
-		return errors.NewValidationError("categories", value, "must be 3 characters long")
+		return errors.NewValidationError(field, value, "must be 3 characters long")
 	}
 	for _, char := range value {
 		if char != '0' && char != '1' {
-			return errors.NewValidationError("categories", value, "must contain only '0' and '1'")
+			return errors.NewValidationError(field, value, "must contain only '0' and '1'")
 		}
 	}
 	return nil
@@ -57,7 +57,7 @@ func (v *Validator) ValidateSort(value string) error {
 			return nil
 		}
 	}
-	return errors.NewValidationError("sort", value, "must be one of: "+joinStrings(constants.ValidSorts))
+	return errors.NewValidationError("sort", value, "must be one of: "+strings.Join(constants.ValidSorts, ", "))
 }
 
 // ValidateOrder validates order parameter
@@ -67,13 +67,21 @@ func (v *Validator) ValidateOrder(value string) error {
 			return nil
 		}
 	}
-	return errors.NewValidationError("order", value, "must be one of: "+joinStrings(constants.ValidOrders))
+	return errors.NewValidationError("order", value, "must be one of: "+strings.Join(constants.ValidOrders, ", "))
+}
+
+// ValidatePage validates the maximum page count parameter
+func (v *Validator) ValidatePage(value int) error {
+	if value < 1 {
+		return errors.NewValidationError("page", strconv.Itoa(value), "must be at least 1")
+	}
+	return nil
 }
 
 // ValidateRating validates rating parameter
 func (v *Validator) ValidateRating(value int) error {
 	if value < constants.MinRating || value > constants.MaxRating {
-		return errors.NewValidationError("rating", string(rune(value)), "must be between 1 and 5")
+		return errors.NewValidationError("rating", strconv.Itoa(value), "must be between 1 and 5")
 	}
 	return nil
 }
@@ -85,17 +93,16 @@ func (v *Validator) ValidateCleanupMode(value string) error {
 			return nil
 		}
 	}
-	return errors.NewValidationError("cleanup_mode", value, "must be one of: "+joinStrings(constants.ValidCleanupModes))
+	return errors.NewValidationError("cleanup_mode", value, "must be one of: "+strings.Join(constants.ValidCleanupModes, ", "))
 }
 
-// Helper function to join strings
-func joinStrings(strings []string) string {
-	result := ""
-	for i, s := range strings {
-		if i > 0 {
-			result += ", "
-		}
-		result += s
+// ValidateScriptPath validates that a script path, when provided, exists
+func (v *Validator) ValidateScriptPath(value string) error {
+	if value == "" {
+		return nil
 	}
-	return result
+	if _, err := os.Stat(value); err != nil {
+		return errors.NewValidationError("scriptPath", value, "file does not exist")
+	}
+	return nil
 }

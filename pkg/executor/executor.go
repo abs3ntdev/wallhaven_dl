@@ -2,11 +2,12 @@
 package executor
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/errors"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/errors"
 )
 
 // ScriptExecutor handles script execution
@@ -32,11 +33,10 @@ func (s *ScriptExecutor) Execute(scriptPath, imagePath string) error {
 	cmd := exec.Command(scriptPath, imagePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	// cmd.Env defaults to nil, which means inherit parent environment
 
 	if err := cmd.Run(); err != nil {
 		s.logger.Error("Script execution failed", "error", err, "script", scriptPath)
-		return errors.ErrScriptExecution
+		return fmt.Errorf("%w: %v", errors.ErrScriptExecution, err)
 	}
 
 	s.logger.Info("Script executed successfully", "script", scriptPath)

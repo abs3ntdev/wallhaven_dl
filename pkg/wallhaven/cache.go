@@ -20,7 +20,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
 )
 
 // WallpaperMetadata contains metadata about a cached wallpaper
@@ -152,6 +152,15 @@ func (c *WallpaperCache) AddWallpaper(wallpaper *Wallpaper, filePath, categories
 	_, err = tx.Exec(`
 		INSERT INTO wallpapers (id, path, original_url, hash, size, downloaded_at, last_used, use_count, categories, purities, resolution)
 		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			path = excluded.path,
+			hash = excluded.hash,
+			size = excluded.size,
+			last_used = excluded.last_used,
+			use_count = use_count + 1,
+			categories = excluded.categories,
+			purities = excluded.purities,
+			resolution = excluded.resolution
 	`, id, filePath, wallpaper.Path, hash, size, now, now, categories, purities, resolution)
 	if err != nil {
 		c.mu.Unlock()
@@ -537,157 +546,145 @@ func (c *WallpaperCache) FindDuplicate(hash string) *WallpaperMetadata {
 	return &metadata
 }
 
+// UsageEntry describes how often a wallpaper has been used
+type UsageEntry struct {
+	ID       string
+	Path     string
+	UseCount int
+}
+
+// TagCount describes how many wallpapers carry a tag
+type TagCount struct {
+	Tag   string
+	Count int
+}
+
+// ResolutionCount describes how many wallpapers have a resolution
+type ResolutionCount struct {
+	Resolution string
+	Count      int
+}
+
+// Statistics contains aggregate information about the cache
+type Statistics struct {
+	TotalWallpapers   int
+	ValidWallpapers   int
+	InvalidWallpapers int
+	TotalSizeMB       float64
+	OldestDownload    time.Time
+	NewestDownload    time.Time
+	CurrentWallpaper  string
+	PreviousWallpaper string
+	FavoriteCount     int
+	AverageRating     float64
+	MostUsed          []UsageEntry
+	TopTags           []TagCount
+	Resolutions       []ResolutionCount
+	UniqueLastWeek    int
+	UniqueLastMonth   int
+	HistoryEntries    int
+}
+
 // GetStatistics returns statistics about the cache
-func (c *WallpaperCache) GetStatistics() map[string]interface{} {
+func (c *WallpaperCache) GetStatistics() *Statistics {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var totalCount, validCount int
+	stats := &Statistics{}
+
 	var totalSize int64
-	var oldestDownload, newestDownload time.Time
+	c.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size), 0) FROM wallpapers`).Scan(&stats.TotalWallpapers, &totalSize)
+	stats.TotalSizeMB = float64(totalSize) / 1024 / 1024
 
-	c.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size), 0) FROM wallpapers`).Scan(&totalCount, &totalSize)
-
-	// Count valid wallpapers (files that exist)
-	rows, err := c.db.Query(`SELECT path FROM wallpapers`)
-	if err == nil {
-		defer rows.Close()
+	if rows, err := c.db.Query(`SELECT path FROM wallpapers`); err == nil {
 		for rows.Next() {
 			var path string
 			if rows.Scan(&path) == nil {
 				if _, err := os.Stat(path); err == nil {
-					validCount++
+					stats.ValidWallpapers++
 				}
 			}
 		}
+		rows.Close()
+	}
+	stats.InvalidWallpapers = stats.TotalWallpapers - stats.ValidWallpapers
+
+	var oldest, newest sql.NullTime
+	if c.db.QueryRow(`SELECT MIN(downloaded_at), MAX(downloaded_at) FROM wallpapers`).Scan(&oldest, &newest) == nil {
+		stats.OldestDownload = oldest.Time
+		stats.NewestDownload = newest.Time
 	}
 
-	c.db.QueryRow(`SELECT MIN(downloaded_at), MAX(downloaded_at) FROM wallpapers`).Scan(&oldestDownload, &newestDownload)
-
-	stats := map[string]interface{}{
-		"total_wallpapers":   totalCount,
-		"valid_wallpapers":   validCount,
-		"invalid_wallpapers": totalCount - validCount,
-		"total_size_mb":      float64(totalSize) / 1024 / 1024,
-		"oldest_download":    oldestDownload,
-		"newest_download":    newestDownload,
-	}
-
-	// Get current and previous wallpaper IDs
-	var currentID, previousID string
-	rows, err = c.db.Query(`
+	if rows, err := c.db.Query(`
 		SELECT DISTINCT wallpaper_id
 		FROM usage_history
 		ORDER BY used_at DESC
 		LIMIT 2
-	`)
-	if err == nil {
-		defer rows.Close()
+	`); err == nil {
 		if rows.Next() {
-			rows.Scan(&currentID)
-			stats["current_wallpaper"] = currentID
+			rows.Scan(&stats.CurrentWallpaper)
 		}
 		if rows.Next() {
-			rows.Scan(&previousID)
-			stats["previous_wallpaper"] = previousID
+			rows.Scan(&stats.PreviousWallpaper)
 		}
+		rows.Close()
 	}
 
-	// Get favorite count
-	var favoriteCount int
-	c.db.QueryRow(`SELECT COUNT(*) FROM wallpapers WHERE is_favorite = 1`).Scan(&favoriteCount)
-	stats["favorite_count"] = favoriteCount
+	c.db.QueryRow(`SELECT COUNT(*) FROM wallpapers WHERE is_favorite = 1`).Scan(&stats.FavoriteCount)
+	c.db.QueryRow(`SELECT COALESCE(AVG(rating), 0) FROM wallpapers WHERE rating > 0`).Scan(&stats.AverageRating)
 
-	// Get average rating
-	var avgRating float64
-	c.db.QueryRow(`SELECT COALESCE(AVG(rating), 0) FROM wallpapers WHERE rating > 0`).Scan(&avgRating)
-	stats["average_rating"] = avgRating
-
-	// Get top 5 most used wallpapers
-	type MostUsed struct {
-		ID       string
-		Path     string
-		UseCount int
-	}
-	mostUsed := []MostUsed{}
-	rows, err = c.db.Query(`
+	if rows, err := c.db.Query(`
 		SELECT id, path, use_count
 		FROM wallpapers
 		ORDER BY use_count DESC
 		LIMIT 5
-	`)
-	if err == nil {
-		defer rows.Close()
+	`); err == nil {
 		for rows.Next() {
-			var mu MostUsed
-			if rows.Scan(&mu.ID, &mu.Path, &mu.UseCount) == nil {
-				mostUsed = append(mostUsed, mu)
+			var entry UsageEntry
+			if rows.Scan(&entry.ID, &entry.Path, &entry.UseCount) == nil {
+				stats.MostUsed = append(stats.MostUsed, entry)
 			}
 		}
+		rows.Close()
 	}
-	stats["most_used"] = mostUsed
 
-	// Get top 10 most common tags
-	type TagCount struct {
-		Tag   string
-		Count int
-	}
-	topTags := []TagCount{}
-	rows, err = c.db.Query(`
+	if rows, err := c.db.Query(`
 		SELECT tag, COUNT(*) as count
 		FROM wallpaper_tags
 		GROUP BY tag
 		ORDER BY count DESC
 		LIMIT 10
-	`)
-	if err == nil {
-		defer rows.Close()
+	`); err == nil {
 		for rows.Next() {
 			var tc TagCount
 			if rows.Scan(&tc.Tag, &tc.Count) == nil {
-				topTags = append(topTags, tc)
+				stats.TopTags = append(stats.TopTags, tc)
 			}
 		}
+		rows.Close()
 	}
-	stats["top_tags"] = topTags
 
-	// Get resolution distribution
-	type ResolutionCount struct {
-		Resolution string
-		Count      int
-	}
-	resolutions := []ResolutionCount{}
-	rows, err = c.db.Query(`
+	if rows, err := c.db.Query(`
 		SELECT COALESCE(resolution, 'unknown'), COUNT(*) as count
 		FROM wallpapers
 		GROUP BY resolution
 		ORDER BY count DESC
 		LIMIT 10
-	`)
-	if err == nil {
-		defer rows.Close()
+	`); err == nil {
 		for rows.Next() {
 			var rc ResolutionCount
 			if rows.Scan(&rc.Resolution, &rc.Count) == nil {
-				resolutions = append(resolutions, rc)
+				stats.Resolutions = append(stats.Resolutions, rc)
 			}
 		}
+		rows.Close()
 	}
-	stats["resolutions"] = resolutions
 
-	// Get usage activity (last 7 days, 30 days)
-	var weekCount, monthCount int
 	weekAgo := time.Now().AddDate(0, 0, -7)
 	monthAgo := time.Now().AddDate(0, -1, 0)
-	c.db.QueryRow(`SELECT COUNT(DISTINCT wallpaper_id) FROM usage_history WHERE used_at > ?`, weekAgo).Scan(&weekCount)
-	c.db.QueryRow(`SELECT COUNT(DISTINCT wallpaper_id) FROM usage_history WHERE used_at > ?`, monthAgo).Scan(&monthCount)
-	stats["unique_wallpapers_last_week"] = weekCount
-	stats["unique_wallpapers_last_month"] = monthCount
-
-	// Total usage history entries
-	var historyCount int
-	c.db.QueryRow(`SELECT COUNT(*) FROM usage_history`).Scan(&historyCount)
-	stats["total_history_entries"] = historyCount
+	c.db.QueryRow(`SELECT COUNT(DISTINCT wallpaper_id) FROM usage_history WHERE used_at > ?`, weekAgo).Scan(&stats.UniqueLastWeek)
+	c.db.QueryRow(`SELECT COUNT(DISTINCT wallpaper_id) FROM usage_history WHERE used_at > ?`, monthAgo).Scan(&stats.UniqueLastMonth)
+	c.db.QueryRow(`SELECT COUNT(*) FROM usage_history`).Scan(&stats.HistoryEntries)
 
 	return stats
 }
@@ -1057,7 +1054,7 @@ func (c *WallpaperCache) GetByTags(tags []string) []*WallpaperMetadata {
 		ORDER BY w.last_used DESC
 	`
 
-	args := make([]interface{}, len(tags)+1)
+	args := make([]any, len(tags)+1)
 	for i, tag := range tags {
 		args[i] = tag
 	}
@@ -1101,7 +1098,7 @@ func (c *WallpaperCache) EnforceCacheLimits() error {
 	targetCount := constants.MaxCacheSize * 90 / 100
 	targetSize := int64(constants.MaxCacheSizeMB) * 1024 * 1024 * 90 / 100
 
-	// Get wallpapers to remove (oldest, non-favorite first)
+	// Collect eviction candidates (oldest, non-favorite first)
 	rows, err := c.db.Query(`
 		SELECT id, path, size
 		FROM wallpapers
@@ -1111,11 +1108,30 @@ func (c *WallpaperCache) EnforceCacheLimits() error {
 	if err != nil {
 		return fmt.Errorf("failed to query wallpapers for cleanup: %w", err)
 	}
-	defer rows.Close()
 
-	var removed int
+	type victim struct {
+		id   string
+		path string
+	}
+	var victims []victim
 	currentSize := totalSize
 	currentCount := totalCount
+
+	for rows.Next() && (currentCount > targetCount || currentSize > targetSize) {
+		var v victim
+		var size int64
+		if rows.Scan(&v.id, &v.path, &size) != nil {
+			continue
+		}
+		victims = append(victims, v)
+		currentSize -= size
+		currentCount--
+	}
+	rows.Close()
+
+	if len(victims) == 0 {
+		return nil
+	}
 
 	tx, err := c.db.Begin()
 	if err != nil {
@@ -1123,37 +1139,23 @@ func (c *WallpaperCache) EnforceCacheLimits() error {
 	}
 	defer tx.Rollback()
 
-	for rows.Next() && (currentCount > targetCount || currentSize > targetSize) {
-		var id, path string
-		var size int64
-		if rows.Scan(&id, &path, &size) != nil {
-			continue
+	for _, v := range victims {
+		if _, err := tx.Exec(`DELETE FROM wallpapers WHERE id = ?`, v.id); err != nil {
+			return fmt.Errorf("failed to delete wallpaper from database: %w", err)
 		}
-
-		// Remove file
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			slog.Warn("Failed to remove wallpaper during cache cleanup", "path", path, "error", err)
-		}
-
-		// Remove from database
-		_, err := tx.Exec(`DELETE FROM wallpapers WHERE id = ?`, id)
-		if err != nil {
-			slog.Warn("Failed to delete wallpaper from database", "id", id, "error", err)
-			continue
-		}
-
-		currentSize -= size
-		currentCount--
-		removed++
 	}
 
-	if removed > 0 {
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit cleanup transaction: %w", err)
-		}
-		slog.Info("Enforced cache limits", "removed", removed, "remaining", currentCount)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit cleanup transaction: %w", err)
 	}
 
+	for _, v := range victims {
+		if err := os.Remove(v.path); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to remove wallpaper during cache cleanup", "path", v.path, "error", err)
+		}
+	}
+
+	slog.Info("Enforced cache limits", "removed", len(victims), "remaining", currentCount)
 	return nil
 }
 

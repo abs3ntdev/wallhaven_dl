@@ -29,8 +29,8 @@ func TestNewWallpaperCache(t *testing.T) {
 
 	// Check initial state
 	stats := cache.GetStatistics()
-	if stats["total_wallpapers"].(int) != 0 {
-		t.Errorf("Expected empty cache, got %d wallpapers", stats["total_wallpapers"])
+	if stats.TotalWallpapers != 0 {
+		t.Errorf("Expected empty cache, got %d wallpapers", stats.TotalWallpapers)
 	}
 }
 
@@ -61,8 +61,8 @@ func TestWallpaperCache_AddWallpaper(t *testing.T) {
 
 	// Verify wallpaper was added
 	stats := cache.GetStatistics()
-	if stats["total_wallpapers"].(int) != 1 {
-		t.Errorf("Expected 1 wallpaper, got %d", stats["total_wallpapers"])
+	if stats.TotalWallpapers != 1 {
+		t.Errorf("Expected 1 wallpaper, got %d", stats.TotalWallpapers)
 	}
 
 	// Verify we can retrieve it
@@ -81,6 +81,39 @@ func TestWallpaperCache_AddWallpaper(t *testing.T) {
 
 	if current.Purities != "110" {
 		t.Errorf("Expected purities '110', got '%s'", current.Purities)
+	}
+}
+
+func TestWallpaperCache_AddWallpaperTwice(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, ".cache")
+
+	testFile := filepath.Join(tmpDir, "test.jpg")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache, err := NewWallpaperCache(cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cache.Close()
+
+	wallpaper := &Wallpaper{
+		Path: "https://example.com/test.jpg",
+	}
+
+	if err := cache.AddWallpaper(wallpaper, testFile, "010", "110"); err != nil {
+		t.Fatalf("AddWallpaper() error = %v", err)
+	}
+
+	if err := cache.AddWallpaper(wallpaper, testFile, "010", "110"); err != nil {
+		t.Fatalf("AddWallpaper() second call error = %v", err)
+	}
+
+	stats := cache.GetStatistics()
+	if stats.TotalWallpapers != 1 {
+		t.Errorf("Expected 1 wallpaper after duplicate add, got %d", stats.TotalWallpapers)
 	}
 }
 

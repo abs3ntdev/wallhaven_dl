@@ -10,16 +10,16 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"git.asdf.cafe/abs3nt/wallhaven_dl/config"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/constants"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/interfaces"
-	"git.asdf.cafe/abs3nt/wallhaven_dl/validator"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/config"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/constants"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/interfaces"
+	"git.asdf.cafe/abs3nt/wallhaven_dl/pkg/validator"
 )
 
 // RateHandler handles rating command
 type RateHandler struct {
 	cache     interfaces.WallpaperCache
-	validator interfaces.Validator
+	validator *validator.Validator
 	logger    *slog.Logger
 }
 
